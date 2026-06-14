@@ -1,99 +1,119 @@
 import type { Edge } from '@xyflow/react'
 import type { EntityNodeType } from './EntityNode'
+import type { FieldMapping } from './types'
 
-// 샘플 스키마: 관계형 테이블 3개 + NoSQL 컬렉션 1개(중첩 필드 포함).
-// events.props 처럼 깊어지는 필드는 indent 로 표현된다.
+// 시나리오: 카프카 이벤트 수신 → API 조회 → DB 조회 → 외부 시스템으로 전송.
+// 소스 3개(좌)의 필드들이 최종 엔티티(우)의 필드로 매핑된다.
 export const initialNodes: EntityNodeType[] = [
+  // ① 카프카로 들어오는 이벤트
   {
-    id: 'users',
+    id: 'orderEvent',
     type: 'entity',
     position: { x: 0, y: 0 },
     data: {
-      name: 'users',
-      kind: 'table',
+      name: 'OrderEvent',
+      kind: 'event',
       fields: [
-        { name: 'id', type: 'uuid', pk: true },
+        { name: 'eventId', type: 'string', pk: true },
+        { name: 'orderId', type: 'string' },
+        { name: 'userId', type: 'string' },
+        { name: 'items', type: 'array' },
+        { name: 'occurredAt', type: 'timestamp' },
+      ],
+    },
+  },
+  // ② API 조회 응답
+  {
+    id: 'customerApi',
+    type: 'entity',
+    position: { x: 0, y: 250 },
+    data: {
+      name: 'CustomerApi',
+      kind: 'api',
+      fields: [
+        { name: 'id', type: 'string', pk: true },
         { name: 'email', type: 'string' },
-        { name: 'display_name', type: 'string', nullable: true },
-        { name: 'created_at', type: 'timestamp' },
-      ],
-    },
-  },
-  {
-    id: 'products',
-    type: 'entity',
-    position: { x: 0, y: 280 },
-    data: {
-      name: 'products',
-      kind: 'table',
-      fields: [
-        { name: 'id', type: 'uuid', pk: true },
-        { name: 'name', type: 'string' },
-        { name: 'price', type: 'number' },
-        { name: 'in_stock', type: 'boolean' },
-        { name: 'tags', type: 'array' },
-      ],
-    },
-  },
-  {
-    id: 'orders',
-    type: 'entity',
-    position: { x: 360, y: 70 },
-    data: {
-      name: 'orders',
-      kind: 'table',
-      fields: [
-        { name: 'id', type: 'uuid', pk: true },
-        { name: 'user_id', type: 'uuid', ref: 'users' },
-        { name: 'product_id', type: 'uuid', ref: 'products' },
-        { name: 'quantity', type: 'number' },
-        { name: 'status', type: 'string' },
-        { name: 'created_at', type: 'timestamp' },
-      ],
-    },
-  },
-  {
-    id: 'events',
-    type: 'entity',
-    position: { x: 740, y: 30 },
-    data: {
-      name: 'events',
-      kind: 'collection',
-      fields: [
-        { name: '_id', type: 'string', pk: true },
-        { name: 'user_id', type: 'string', ref: 'users' },
         { name: 'name', type: 'string' },
         {
-          name: 'props',
+          name: 'address',
           type: 'object',
           children: [
-            { name: 'source', type: 'string' },
-            {
-              name: 'session',
-              type: 'object',
-              children: [
-                { name: 'device', type: 'string' },
-                { name: 'os', type: 'string' },
-              ],
-            },
+            { name: 'city', type: 'string' },
+            { name: 'country', type: 'string' },
           ],
         },
-        { name: 'ts', type: 'timestamp' },
+        { name: 'vip', type: 'boolean' },
+      ],
+    },
+  },
+  // ③ DB 조회 결과
+  {
+    id: 'accountDb',
+    type: 'entity',
+    position: { x: 0, y: 530 },
+    data: {
+      name: 'AccountDb',
+      kind: 'db',
+      fields: [
+        { name: 'account_id', type: 'string', pk: true },
+        { name: 'user_id', type: 'string' },
+        { name: 'plan', type: 'string' },
+        { name: 'credit', type: 'number' },
+        { name: 'region', type: 'string' },
+      ],
+    },
+  },
+  // ④ 외부 시스템으로 전송하는 최종 엔티티 (소스들의 조합, 슈퍼셋은 아님)
+  {
+    id: 'fulfillment',
+    type: 'entity',
+    position: { x: 560, y: 210 },
+    data: {
+      name: 'FulfillmentRequest',
+      kind: 'output',
+      fields: [
+        { name: 'requestId', type: 'string', pk: true },
+        {
+          name: 'customer',
+          type: 'object',
+          children: [
+            { name: 'id', type: 'string' },
+            { name: 'email', type: 'string' },
+            { name: 'city', type: 'string' },
+          ],
+        },
+        {
+          name: 'order',
+          type: 'object',
+          children: [
+            { name: 'id', type: 'string' },
+            { name: 'items', type: 'array' },
+          ],
+        },
+        { name: 'plan', type: 'string' },
+        { name: 'region', type: 'string' },
       ],
     },
   },
 ]
 
-// type / markerEnd 는 Flow.tsx 의 defaultEdgeOptions 에서 일괄 지정 (default = 베지어)
-const edge = (id: string, source: string, sourceHandle: string, target: string): Edge => ({
-  id,
-  source,
-  sourceHandle,
-  target,
-})
-
-export const initialEdges: Edge[] = [
-  edge('orders_user', 'orders', 'user_id', 'users'),
-  edge('orders_product', 'orders', 'product_id', 'products'),
-  edge('events_user', 'events', 'user_id', 'users'),
+// ── 핵심: 필드 ↔ 필드 매핑 ────────────────────────────────────────────
+export const mappings: FieldMapping[] = [
+  { id: 'm1', source: 'orderEvent', sourceField: 'orderId', target: 'fulfillment', targetField: 'order.id' },
+  { id: 'm2', source: 'orderEvent', sourceField: 'items', target: 'fulfillment', targetField: 'order.items' },
+  { id: 'm3', source: 'customerApi', sourceField: 'id', target: 'fulfillment', targetField: 'customer.id' },
+  { id: 'm4', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email' },
+  { id: 'm5', source: 'customerApi', sourceField: 'address.city', target: 'fulfillment', targetField: 'customer.city' },
+  { id: 'm6', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
+  { id: 'm7', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
 ]
+
+// 매핑을 React Flow 엣지로 변환 (핸들 id = 필드 경로)
+export const initialEdges: Edge[] = mappings.map((m) => ({
+  id: m.id,
+  source: m.source,
+  sourceHandle: m.sourceField,
+  target: m.target,
+  targetHandle: m.targetField,
+  label: m.label,
+}))

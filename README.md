@@ -1,15 +1,27 @@
 # liner
 
-데이터 엔티티 간의 **연결을 시각적으로 보여주는** 앱입니다. 각 데이터를 **표 형태 노드**로 그리고, 참조 관계를 연결선으로 잇습니다. 관계형(table)에 한정하지 않고 **NoSQL(collection/document)** 도 동일하게 다루며, 중첩이 깊은 필드는 **들여쓰기(indent)** 로 표현합니다.
+**필드 단위 데이터 lineage(흐름)** 를 시각화하는 앱입니다. 여러 데이터 소스의 **어떤 필드**가 다른 엔티티의 **어떤 필드**로 연동되는지를 그래프(엣지)로 보여줍니다. 각 엔티티는 **표 형태 노드**로 그리고, 중첩이 깊은 필드는 **들여쓰기(indent)** 로 표현합니다.
 
-> [React Flow](https://reactflow.dev) 기반의 인터랙티브 캔버스로, 노드를 드래그하거나 핸들을 끌어 새 연결을 만들 수 있습니다.
+> [React Flow](https://reactflow.dev) 기반의 인터랙티브 캔버스로, 필드의 핸들을 끌어 새 매핑을 만들 수 있습니다.
+
+## 대표 사용 사례
+
+한 시스템의 데이터 처리 흐름을 그대로 그래프로 표현합니다.
+
+1. **Kafka**에서 이벤트를 수신 (이벤트 구조 = 엔티티)
+2. 그 정보로 **API 조회** (응답값 = 엔티티)
+3. **DB 조회**로 데이터 획득 (= 엔티티)
+4. 각 정보를 조합해 **외부 시스템으로 전송** (최종 엔티티)
+
+최종 엔티티는 소스들의 **조합이지만 슈퍼셋은 아닙니다**(필요한 필드만 골라 옴). 각 소스의 어떤 필드가 최종 엔티티의 어떤 필드를 채우는지를 엣지로 나타냅니다.
 
 ## 주요 컨셉
 
-- **엔티티 = 표 노드** — 헤더(이름 + 종류)와 필드 행으로 구성. HTML `<table>` 태그를 강제하지 않습니다.
-- **관계형 / NoSQL 통합 모델** — `table`, `collection`, `document` 종류를 하나의 데이터 구조로 표현.
-- **깊이 = 들여쓰기** — `children`을 가진 중첩 필드는 depth에 비례해 indent.
-- **필드 단위 연결** — 참조(FK) 필드 행에서 연결선이 출발해 대상 엔티티로 이어집니다.
+- **필드 ↔ 필드 매핑 (핵심)** — 엣지가 `엔티티A.필드x → 엔티티B.필드y` 단위입니다. 모든 필드 행이 좌(도착)·우(출발) 핸들을 가지며, 핸들 id 는 **점(.)으로 구분한 필드 경로**(중첩 포함, 예: `address.city`)입니다.
+- **매핑은 별도 목록** — 엔티티 정의와 분리된 `FieldMapping[]` 로 관리하고 엣지로 변환합니다.
+- **엔티티 = 표 노드** — 헤더(종류 아이콘 + 이름 + 종류 라벨)와 필드 행으로 구성. HTML `<table>` 태그를 강제하지 않습니다.
+- **깊이 = 들여쓰기** — `children` 을 가진 중첩 필드는 depth 에 비례해 indent.
+- **오른쪽 패널** — 존재하는 엔티티 목록 → 클릭 시 필드명·타입 상세. 캔버스 노드를 클릭해도 같은 상세가 열립니다.
 
 ## 기술 스택
 
@@ -43,23 +55,24 @@ npm run dev      # 개발 서버 → http://localhost:5173
 
 ```
 src/
-├─ main.tsx            # 앱 부트스트랩
-├─ App.tsx             # <Flow /> 렌더
-├─ index.css           # Tailwind v4 import + shadcn 테마 토큰
+├─ main.tsx             # 앱 부트스트랩
+├─ App.tsx              # <Flow /> 렌더
+├─ index.css            # Tailwind v4 import + shadcn 테마 토큰
 ├─ flow/
-│  ├─ Flow.tsx         # React Flow 캔버스 (노드·엣지·컨트롤 배선)
-│  ├─ EntityNode.tsx   # 표 형태 커스텀 노드 (헤더 + 필드 행 + 핸들)
-│  ├─ sample-data.ts   # 샘플 스키마 (초기 노드·엣지)
-│  └─ types.ts         # 데이터 모델 (EntityData, Field)
-├─ components/ui/      # shadcn 컴포넌트
-│  └─ badge.tsx
+│  ├─ Flow.tsx          # 캔버스 + 오른쪽 패널 레이아웃, 상태·연동
+│  ├─ EntityNode.tsx    # 표 형태 노드 (필드별 좌/우 핸들)
+│  ├─ EntityPanel.tsx   # 오른쪽 패널 (엔티티 목록 + 필드/타입 상세)
+│  ├─ entity-kind.tsx   # 엔티티 종류별 아이콘·라벨 (노드·패널 공용)
+│  ├─ sample-data.ts    # 샘플 엔티티 + 필드 매핑
+│  └─ types.ts          # 데이터 모델 (EntityData, Field, FieldMapping)
+├─ components/ui/       # shadcn 컴포넌트 (badge, button)
 └─ lib/
-   └─ utils.ts         # cn() className 헬퍼
+   └─ utils.ts          # cn() className 헬퍼
 ```
 
 ## 데이터 모델
 
-노드 하나가 표현하는 엔티티의 모양은 [`src/flow/types.ts`](src/flow/types.ts)에 정의되어 있습니다.
+[`src/flow/types.ts`](src/flow/types.ts) 에 정의되어 있습니다.
 
 ```ts
 type Field = {
@@ -67,37 +80,35 @@ type Field = {
   type: 'uuid' | 'string' | 'number' | 'boolean' | 'timestamp' | 'object' | 'array' | 'json'
   nullable?: boolean   // 타입 옆에 ? 로 표기
   pk?: boolean         // primary key (🔑 표시)
-  ref?: string         // 참조 대상 엔티티 id → 연결선의 출발 핸들
-  children?: Field[]   // 중첩 필드 → depth 만큼 indent
+  children?: Field[]   // 중첩 필드 → indent. 핸들 경로는 부모.자식 으로 이어짐
 }
 
 type EntityData = {
   name: string
-  kind: 'table' | 'collection' | 'document'
+  kind: 'event' | 'api' | 'db' | 'output'  // kafka 이벤트 / API 응답 / DB / 외부 전송
   fields: Field[]
 }
-```
 
-엔티티를 노드로 추가하는 예시 ([`src/flow/sample-data.ts`](src/flow/sample-data.ts) 참고):
-
-```ts
-{
-  id: 'users',
-  type: 'entity',
-  position: { x: 0, y: 0 },
-  data: {
-    name: 'users',
-    kind: 'table',
-    fields: [
-      { name: 'id', type: 'uuid', pk: true },
-      { name: 'email', type: 'string' },
-      { name: 'created_at', type: 'timestamp' },
-    ],
-  },
+// ── 핵심: 필드 ↔ 필드 매핑 ──
+type FieldMapping = {
+  id: string
+  source: string       // 출발 엔티티 id
+  sourceField: string  // 출발 필드 경로 (예: 'address.city')
+  target: string       // 도착 엔티티 id
+  targetField: string  // 도착 필드 경로 (예: 'customer.city')
+  label?: string       // 변환 메모 등 (선택)
 }
 ```
 
-`ref`이 지정된 필드는 자동으로 연결 핸들이 생기고, 해당 필드에서 대상 엔티티로 엣지를 연결할 수 있습니다.
+엔티티와 매핑은 [`src/flow/sample-data.ts`](src/flow/sample-data.ts) 에서 정의합니다. 매핑 예시:
+
+```ts
+// CustomerApi.address.city → FulfillmentRequest.customer.city
+{ id: 'm5', source: 'customerApi', sourceField: 'address.city',
+  target: 'fulfillment', targetField: 'customer.city' }
+```
+
+`mappings` 배열은 그대로 React Flow 엣지로 변환됩니다(`sourceHandle`/`targetHandle` = 필드 경로). 따라서 `sourceField`/`targetField` 값은 노드 필드 행의 **핸들 id(= 필드 경로)와 정확히 일치**해야 하며, 중첩 필드는 `부모.자식` 경로로 지정합니다. 경로가 어긋나면 React Flow 가 "couldn't find handle" 경고를 냅니다.
 
 ## 스타일 / UI
 
@@ -105,14 +116,17 @@ type EntityData = {
 - **shadcn/ui** — 컴포넌트는 프로젝트에 직접 복사되어 자유롭게 수정 가능. 새 컴포넌트 추가:
 
   ```bash
-  npx shadcn@latest add button card dialog
+  npx shadcn@latest add dialog tooltip
   ```
 
 - **경로 별칭** — `@/` 는 `src/` 를 가리킵니다. 예: `import { Badge } from '@/components/ui/badge'`
 
 ## 로드맵
 
-- [ ] 연결선 라우팅 개선 (floating edge로 대상 방향에 맞춰 핸들 자동 배치)
-- [ ] 실제 데이터(JSON/스키마) 주입 및 파서
-- [ ] 인터랙션 — 연결 엔티티 하이라이트, 중첩 필드 접기/펼치기
+- [ ] 패널 매핑 인식 — 엔티티/필드 선택 시 "어디로 / 어디서" 연동되는지 함께 표시
+- [ ] 핸들 시각 정리 — 연결된 핸들만 강조하거나 호버 시에만 노출
+- [ ] 엣지에 변환(transform) 라벨 — 단순 복사가 아닌 가공 표기
+- [ ] 필드·엣지 클릭 시 연결된 lineage 하이라이트
+- [ ] 실제 스키마(JSON) 주입 및 파서
 - [ ] 다크 모드 토글 (테마 토큰은 이미 준비됨)
+```

@@ -1,23 +1,9 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  Database,
-  FileJson,
-  KeyRound,
-  Link2,
-  Table2,
-  type LucideIcon,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, KeyRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { KIND_META } from './entity-kind'
 import type { EntityNodeType } from './EntityNode'
-import type { EntityData, EntityKind, Field } from './types'
-
-const KIND_ICON: Record<EntityKind, LucideIcon> = {
-  table: Table2,
-  collection: Database,
-  document: FileJson,
-}
+import type { EntityData, Field } from './types'
 
 // 중첩 필드까지 모두 합한 개수
 function countFields(fields: Field[]): number {
@@ -71,7 +57,8 @@ function EntityList({
       </header>
       <div className="flex-1 overflow-y-auto p-2">
         {nodes.map((node) => {
-          const Icon = KIND_ICON[node.data.kind]
+          const meta = KIND_META[node.data.kind]
+          const Icon = meta.icon
           return (
             <button
               key={node.id}
@@ -84,16 +71,10 @@ function EntityList({
                 <span className="truncate text-sm font-medium">
                   {node.data.name}
                 </span>
-                <Badge
-                  variant="outline"
-                  className="ml-auto text-[10px] font-normal"
-                >
-                  {node.data.kind}
-                </Badge>
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground" />
+                <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground" />
               </span>
               <span className="pl-6 text-xs text-muted-foreground">
-                {countFields(node.data.fields)} fields
+                {meta.label} · {countFields(node.data.fields)} fields
               </span>
             </button>
           )
@@ -111,7 +92,8 @@ function EntityDetail({
   data: EntityData
   onBack: () => void
 }) {
-  const Icon = KIND_ICON[data.kind]
+  const meta = KIND_META[data.kind]
+  const Icon = meta.icon
   return (
     <>
       <header className="border-b border-border p-2">
@@ -128,7 +110,7 @@ function EntityDetail({
           <Icon className="size-4 text-muted-foreground" />
           <span className="text-sm font-semibold">{data.name}</span>
           <Badge variant="outline" className="ml-auto text-[10px] font-normal">
-            {data.kind}
+            {meta.label}
           </Badge>
         </div>
       </header>
@@ -153,15 +135,7 @@ function PanelFieldRow({ field, depth }: { field: Field; depth: number }) {
         style={{ paddingLeft: 8 + depth * 14 }}
       >
         {field.pk && <KeyRound className="size-3 shrink-0 text-amber-500" />}
-        {field.ref && !field.pk && (
-          <Link2 className="size-3 shrink-0 text-primary" />
-        )}
         <span className="truncate text-sm">{field.name}</span>
-        {field.ref && (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            → {field.ref}
-          </span>
-        )}
         <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
           {field.type}
           {field.nullable ? '?' : ''}
