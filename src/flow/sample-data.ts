@@ -1,4 +1,4 @@
-import { MarkerType, type Edge } from '@xyflow/react'
+import type { Edge } from '@xyflow/react'
 import type { EntityNodeType } from './EntityNode'
 
 // 샘플 스키마: 관계형 테이블 3개 + NoSQL 컬렉션 1개(중첩 필드 포함).
@@ -84,13 +84,12 @@ export const initialNodes: EntityNodeType[] = [
   },
 ]
 
+// type / markerEnd 는 Flow.tsx 의 defaultEdgeOptions 에서 일괄 지정 (default = 베지어)
 const edge = (id: string, source: string, sourceHandle: string, target: string): Edge => ({
   id,
   source,
   sourceHandle,
   target,
-  type: 'smoothstep',
-  markerEnd: { type: MarkerType.ArrowClosed },
 })
 
 export const initialEdges: Edge[] = [
