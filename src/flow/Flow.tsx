@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { EntityNode, type EntityNodeType } from './EntityNode'
-import { EntityPanel } from './EntityPanel'
+import { SidePanel } from './SidePanel'
 import { EdgeKindControl } from './EdgeKindControl'
 import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { initialNodes, initialEdges } from './sample-data'
@@ -22,9 +22,8 @@ import type { MappingKind } from './types'
 export default function Flow() {
   const nodeTypes = useMemo(() => ({ entity: EntityNode }), [])
 
-  const [nodes, , onNodesChange] = useNodesState<EntityNodeType>(initialNodes)
+  const [nodes, setNodes, onNodesChange] = useNodesState<EntityNodeType>(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState<MappingEdge>(initialEdges)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [newEdgeKind, setNewEdgeKind] = useState<MappingKind>('keep')
 
   // 새 연결은 현재 선택된 종류(유지/가공)로 생성
@@ -32,12 +31,6 @@ export default function Flow() {
     (params) =>
       setEdges((eds) => addEdge({ ...params, ...edgeKindProps(newEdgeKind) }, eds)),
     [setEdges, newEdgeKind],
-  )
-
-  // 캔버스 노드 클릭 → 패널 상세
-  const onNodeClick = useCallback(
-    (_: MouseEvent, node: EntityNodeType) => setSelectedId(node.id),
-    [],
   )
 
   // 엣지 클릭 → 유지 ⇄ 가공 전환
@@ -68,7 +61,6 @@ export default function Flow() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
           defaultEdgeOptions={{
             type: 'default',
@@ -99,12 +91,7 @@ export default function Flow() {
         </ReactFlow>
       </div>
 
-      <EntityPanel
-        nodes={nodes}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        onClear={() => setSelectedId(null)}
-      />
+      <SidePanel nodes={nodes} setNodes={setNodes} />
     </div>
   )
 }
