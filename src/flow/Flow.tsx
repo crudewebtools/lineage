@@ -74,9 +74,9 @@ export default function Flow() {
           <MiniMap pannable zoomable />
           <Panel position="top-left">
             <div className="rounded-md border border-border bg-card/90 px-3 py-1.5 text-sm font-semibold shadow-sm backdrop-blur">
-              liner{' '}
+              lineage{' '}
               <span className="font-normal text-muted-foreground">
-                · data lineage (prototype)
+                · field mapping (prototype)
               </span>
             </div>
           </Panel>
