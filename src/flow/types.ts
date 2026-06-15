@@ -22,13 +22,16 @@ export type Field = {
   children?: Field[]
 }
 
-export type EntityKind = 'event' | 'api' | 'db' | 'output'
+export type EntityKind = 'event' | 'api' | 'db' | 'etc'
 
 export type EntityData = {
   name: string
   kind: EntityKind
   fields: Field[]
 }
+
+// 매핑 종류: keep = 값이 그대로 유지(실선), transform = 가공/입력으로 사용(점선)
+export type MappingKind = 'keep' | 'transform'
 
 // ── 핵심: 필드 ↔ 필드 매핑 ────────────────────────────────────────────
 // 어떤 엔티티의 어떤 필드가 다른 엔티티의 어떤 필드로 연동되는지(데이터 lineage).
@@ -39,6 +42,8 @@ export type FieldMapping = {
   sourceField: string // 출발 필드 경로
   target: string // 도착 엔티티 id
   targetField: string // 도착 필드 경로
+  /** keep(실선)=값 유지, transform(점선)=가공. 기본 keep */
+  kind?: MappingKind
   /** 변환 메모 등 (선택) */
   label?: string
 }

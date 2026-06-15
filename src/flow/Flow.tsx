@@ -9,30 +9,53 @@ import {
   useNodesState,
   useEdgesState,
   MarkerType,
-  type Edge,
   type OnConnect,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { EntityNode, type EntityNodeType } from './EntityNode'
 import { EntityPanel } from './EntityPanel'
+import { EdgeKindControl } from './EdgeKindControl'
+import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { initialNodes, initialEdges } from './sample-data'
+import type { MappingKind } from './types'
 
 export default function Flow() {
   const nodeTypes = useMemo(() => ({ entity: EntityNode }), [])
 
   const [nodes, , onNodesChange] = useNodesState<EntityNodeType>(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges)
+  const [edges, setEdges, onEdgesChange] = useEdgesState<MappingEdge>(initialEdges)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [newEdgeKind, setNewEdgeKind] = useState<MappingKind>('keep')
 
+  // 새 연결은 현재 선택된 종류(유지/가공)로 생성
   const onConnect: OnConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges],
+    (params) =>
+      setEdges((eds) => addEdge({ ...params, ...edgeKindProps(newEdgeKind) }, eds)),
+    [setEdges, newEdgeKind],
   )
 
-  // 캔버스에서 노드를 클릭해도 패널 상세가 열리도록 연동
+  // 캔버스 노드 클릭 → 패널 상세
   const onNodeClick = useCallback(
     (_: MouseEvent, node: EntityNodeType) => setSelectedId(node.id),
     [],
+  )
+
+  // 엣지 클릭 → 유지 ⇄ 가공 전환
+  const onEdgeClick = useCallback(
+    (_: MouseEvent, edge: MappingEdge) =>
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edge.id
+            ? {
+                ...e,
+                ...edgeKindProps(
+                  e.data?.kind === 'transform' ? 'keep' : 'transform',
+                ),
+              }
+            : e,
+        ),
+      ),
+    [setEdges],
   )
 
   return (
@@ -46,6 +69,7 @@ export default function Flow() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
           defaultEdgeOptions={{
             type: 'default',
             markerEnd: { type: MarkerType.ArrowClosed },
@@ -60,7 +84,15 @@ export default function Flow() {
             <div className="rounded-md border border-border bg-card/90 px-3 py-1.5 text-sm font-semibold shadow-sm backdrop-blur">
               liner{' '}
               <span className="font-normal text-muted-foreground">
-                · data graph (prototype)
+                · data lineage (prototype)
+              </span>
+            </div>
+          </Panel>
+          <Panel position="top-right">
+            <div className="flex flex-col items-end gap-1">
+              <EdgeKindControl value={newEdgeKind} onChange={setNewEdgeKind} />
+              <span className="rounded bg-card/80 px-1.5 py-0.5 text-[10px] text-muted-foreground backdrop-blur">
+                엣지 클릭 시 유지 ⇄ 가공 전환
               </span>
             </div>
           </Panel>

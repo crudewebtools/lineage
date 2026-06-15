@@ -1,4 +1,4 @@
-import type { Edge } from '@xyflow/react'
+import { edgeKindProps, type MappingEdge } from './edge-kind'
 import type { EntityNodeType } from './EntityNode'
 import type { FieldMapping } from './types'
 
@@ -70,7 +70,7 @@ export const initialNodes: EntityNodeType[] = [
     position: { x: 560, y: 210 },
     data: {
       name: 'FulfillmentRequest',
-      kind: 'output',
+      kind: 'etc',
       fields: [
         { name: 'requestId', type: 'string', pk: true },
         {
@@ -100,20 +100,21 @@ export const initialNodes: EntityNodeType[] = [
 // ── 핵심: 필드 ↔ 필드 매핑 ────────────────────────────────────────────
 export const mappings: FieldMapping[] = [
   { id: 'm1', source: 'orderEvent', sourceField: 'orderId', target: 'fulfillment', targetField: 'order.id' },
-  { id: 'm2', source: 'orderEvent', sourceField: 'items', target: 'fulfillment', targetField: 'order.items' },
+  { id: 'm2', source: 'orderEvent', sourceField: 'items', target: 'fulfillment', targetField: 'order.items', kind: 'transform' },
   { id: 'm3', source: 'customerApi', sourceField: 'id', target: 'fulfillment', targetField: 'customer.id' },
-  { id: 'm4', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email' },
+  { id: 'm4', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email', kind: 'transform' },
   { id: 'm5', source: 'customerApi', sourceField: 'address.city', target: 'fulfillment', targetField: 'customer.city' },
   { id: 'm6', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
   { id: 'm7', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
 ]
 
 // 매핑을 React Flow 엣지로 변환 (핸들 id = 필드 경로)
-export const initialEdges: Edge[] = mappings.map((m) => ({
+export const initialEdges: MappingEdge[] = mappings.map((m) => ({
   id: m.id,
   source: m.source,
   sourceHandle: m.sourceField,
   target: m.target,
   targetHandle: m.targetField,
   label: m.label,
+  ...edgeKindProps(m.kind ?? 'keep'),
 }))
