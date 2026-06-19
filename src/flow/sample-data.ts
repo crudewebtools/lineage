@@ -17,7 +17,18 @@ export const initialNodes: EntityNodeType[] = [
         { name: 'eventId', type: 'string', pk: true },
         { name: 'orderId', type: 'string' },
         { name: 'userId', type: 'string' },
-        { name: 'items', type: 'array' },
+        {
+          name: 'items',
+          type: 'object',
+          array: true,
+          children: [
+            { name: 'productId', type: 'string' },
+            { name: 'name', type: 'string' },
+            { name: 'quantity', type: 'number' },
+            { name: 'price', type: 'number' },
+            { name: 'discount', type: 'number', nullable: true },
+          ],
+        },
         { name: 'occurredAt', type: 'timestamp' },
       ],
     },
@@ -26,7 +37,7 @@ export const initialNodes: EntityNodeType[] = [
   {
     id: 'customerApi',
     type: 'entity',
-    position: { x: 0, y: 250 },
+    position: { x: 0, y: 380 },
     data: {
       name: 'CustomerApi',
       kind: 'api',
@@ -50,7 +61,7 @@ export const initialNodes: EntityNodeType[] = [
   {
     id: 'accountDb',
     type: 'entity',
-    position: { x: 0, y: 530 },
+    position: { x: 0, y: 670 },
     data: {
       name: 'AccountDb',
       kind: 'db',
@@ -58,7 +69,7 @@ export const initialNodes: EntityNodeType[] = [
         { name: 'account_id', type: 'string', pk: true },
         { name: 'user_id', type: 'string' },
         { name: 'plan', type: 'string' },
-        { name: 'credit', type: 'number' },
+        { name: 'credit', type: 'number', nullable: true },
         { name: 'region', type: 'string' },
       ],
     },
@@ -67,7 +78,7 @@ export const initialNodes: EntityNodeType[] = [
   {
     id: 'fulfillment',
     type: 'entity',
-    position: { x: 560, y: 210 },
+    position: { x: 560, y: 250 },
     data: {
       name: 'FulfillmentRequest',
       kind: 'etc',
@@ -87,7 +98,16 @@ export const initialNodes: EntityNodeType[] = [
           type: 'object',
           children: [
             { name: 'id', type: 'string' },
-            { name: 'items', type: 'array' },
+            {
+              name: 'items',
+              type: 'object',
+              array: true,
+              children: [
+                { name: 'productId', type: 'string' },
+                { name: 'name', type: 'string' },
+                { name: 'quantity', type: 'number' },
+              ],
+            },
           ],
         },
         { name: 'plan', type: 'string' },
@@ -99,13 +119,19 @@ export const initialNodes: EntityNodeType[] = [
 
 // ── 핵심: 필드 ↔ 필드 매핑 ────────────────────────────────────────────
 export const mappings: FieldMapping[] = [
+  // OrderEvent → FulfillmentRequest.order
   { id: 'm1', source: 'orderEvent', sourceField: 'orderId', target: 'fulfillment', targetField: 'order.id' },
-  { id: 'm2', source: 'orderEvent', sourceField: 'items', target: 'fulfillment', targetField: 'order.items', kind: 'transform' },
-  { id: 'm3', source: 'customerApi', sourceField: 'id', target: 'fulfillment', targetField: 'customer.id' },
-  { id: 'm4', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email', kind: 'transform' },
-  { id: 'm5', source: 'customerApi', sourceField: 'address.city', target: 'fulfillment', targetField: 'customer.city' },
-  { id: 'm6', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
-  { id: 'm7', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
+  // items(object[]) 끼리 컨테이너 단위로 잇지 않고, 리프 필드 단위로 매핑한다
+  { id: 'm2', source: 'orderEvent', sourceField: 'items.productId', target: 'fulfillment', targetField: 'order.items.productId' },
+  { id: 'm3', source: 'orderEvent', sourceField: 'items.name', target: 'fulfillment', targetField: 'order.items.name' },
+  { id: 'm4', source: 'orderEvent', sourceField: 'items.quantity', target: 'fulfillment', targetField: 'order.items.quantity' },
+  // CustomerApi → FulfillmentRequest.customer
+  { id: 'm5', source: 'customerApi', sourceField: 'id', target: 'fulfillment', targetField: 'customer.id' },
+  { id: 'm6', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email', kind: 'transform' },
+  { id: 'm7', source: 'customerApi', sourceField: 'address.city', target: 'fulfillment', targetField: 'customer.city' },
+  // AccountDb → FulfillmentRequest
+  { id: 'm8', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
+  { id: 'm9', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
 ]
 
 // 매핑을 React Flow 엣지로 변환 (핸들 id = 필드 경로)

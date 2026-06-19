@@ -17,7 +17,7 @@
 
 ## 주요 컨셉
 
-- **필드 ↔ 필드 매핑 (핵심)** — 엣지가 `엔티티A.필드x → 엔티티B.필드y` 단위입니다. 모든 필드 행이 좌(도착)·우(출발) 핸들을 가지며, 핸들 id 는 **점(.)으로 구분한 필드 경로**(중첩 포함, 예: `address.city`)입니다.
+- **필드 ↔ 필드 매핑 (핵심)** — 엣지가 `엔티티A.필드x → 엔티티B.필드y` 단위입니다. **리프(말단) 필드 행만** 좌(도착)·우(출발) 핸들을 갖고, `object`·`object[]` 같은 컨테이너 필드는 핸들을 노출하지 않아 연결할 수 없습니다(컨테이너끼리 잇는 대신 리프 단위로 매핑). 핸들 id 는 **점(.)으로 구분한 필드 경로**(중첩 포함, 예: `address.city`)입니다.
 - **엣지 두 종류** — **실선(`keep`)** 은 값이 그대로 유지됨, **점선(`transform`)** 은 가공됨(trim·포맷 변경·다른 필드 생성의 입력 등). 우상단 `새 엣지` 토글로 그릴 종류를 고르고, 기존 엣지는 **클릭으로 유지 ⇄ 가공 전환**.
 - **매핑은 별도 목록** — 엔티티 정의와 분리된 `FieldMapping[]` 로 관리하고 엣지로 변환합니다.
 - **엔티티 = 표 노드** — 헤더(종류 아이콘 + 이름 + 종류 라벨)와 필드 행으로 구성. HTML `<table>` 태그를 강제하지 않습니다.
@@ -80,7 +80,8 @@ src/
 ```ts
 type Field = {
   name: string
-  type: 'uuid' | 'string' | 'number' | 'boolean' | 'timestamp' | 'object' | 'array' | 'json'
+  type: 'uuid' | 'string' | 'number' | 'boolean' | 'timestamp' | 'object' | 'json'
+  array?: boolean      // 배열이면 타입 옆에 [] 로 표기. 예: object[] , string[]
   nullable?: boolean   // 타입 옆에 ? 로 표기
   pk?: boolean         // primary key (🔑 표시)
   children?: Field[]   // 중첩 필드 → indent. 핸들 경로는 부모.자식 으로 이어짐

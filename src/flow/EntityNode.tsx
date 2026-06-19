@@ -28,24 +28,32 @@ function FieldRow({
   path: string
 }) {
   const children = field.children ?? []
+  // object / object[] 는 컨테이너 → 핸들을 아예 노출하지 않아 연결을 막는다.
+  // lineage 는 컨테이너가 아니라 리프(말단) 필드 단위로 잇는다.
+  const connectable = field.type !== 'object'
   return (
     <>
       <div
         className="relative flex items-center gap-2 border-t border-border/60 py-1.5 pr-3 text-xs hover:bg-accent/40"
         style={{ paddingLeft: 12 + depth * 16 }}
       >
-        {/* 도착 핸들 (왼쪽) */}
-        <Handle type="target" position={Position.Left} id={path} style={handleStyle} />
+        {/* 도착 핸들 (왼쪽) — 컨테이너 필드는 제외 */}
+        {connectable && (
+          <Handle type="target" position={Position.Left} id={path} style={handleStyle} />
+        )}
 
         {field.pk && <KeyRound className="size-3 shrink-0 text-amber-500" />}
         <span className="font-medium">{field.name}</span>
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
           {field.type}
+          {field.array ? '[]' : ''}
           {field.nullable ? '?' : ''}
         </span>
 
-        {/* 출발 핸들 (오른쪽) */}
-        <Handle type="source" position={Position.Right} id={path} style={handleStyle} />
+        {/* 출발 핸들 (오른쪽) — 컨테이너 필드는 제외 */}
+        {connectable && (
+          <Handle type="source" position={Position.Right} id={path} style={handleStyle} />
+        )}
       </div>
 
       {children.map((child) => (

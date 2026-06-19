@@ -21,7 +21,6 @@ const TYPES: FieldType[] = [
   'boolean',
   'timestamp',
   'object',
-  'array',
   'json',
 ]
 
@@ -119,6 +118,8 @@ type FieldDraft = {
   _k: number
   name: string
   type: FieldType
+  array: boolean
+  nullable: boolean
   pk: boolean
   children?: Field[] // 중첩 필드는 보존만 (폼에서 편집하지 않음)
 }
@@ -140,6 +141,8 @@ function EntityForm({
       _k: nextKey.current++,
       name: f.name,
       type: f.type,
+      array: Boolean((f as Field).array),
+      nullable: Boolean((f as Field).nullable),
       pk: Boolean((f as Field).pk),
       children: (f as Field).children,
     })),
@@ -153,7 +156,14 @@ function EntityForm({
   const add = () =>
     setFields((fs) => [
       ...fs,
-      { _k: nextKey.current++, name: '', type: 'string', pk: false },
+      {
+        _k: nextKey.current++,
+        name: '',
+        type: 'string',
+        array: false,
+        nullable: false,
+        pk: false,
+      },
     ])
 
   const handleSave = () => {
@@ -227,6 +237,28 @@ function EntityForm({
             </select>
             <button
               type="button"
+              title="배열 (array)"
+              onClick={() => patch(f._k, { array: !f.array })}
+              className={cn(
+                'px-1 font-mono text-xs',
+                f.array ? 'text-foreground' : 'text-muted-foreground/40',
+              )}
+            >
+              []
+            </button>
+            <button
+              type="button"
+              title="nullable (null 허용)"
+              onClick={() => patch(f._k, { nullable: !f.nullable })}
+              className={cn(
+                'px-1 font-mono text-xs',
+                f.nullable ? 'text-foreground' : 'text-muted-foreground/40',
+              )}
+            >
+              ?
+            </button>
+            <button
+              type="button"
               title="primary key"
               onClick={() => patch(f._k, { pk: !f.pk })}
               className="p-1"
@@ -288,6 +320,8 @@ function Labeled({
 
 function toField(d: FieldDraft): Field {
   const f: Field = { name: d.name.trim(), type: d.type }
+  if (d.array) f.array = true
+  if (d.nullable) f.nullable = true
   if (d.pk) f.pk = true
   if (d.children && d.children.length) f.children = d.children
   return f

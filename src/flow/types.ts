@@ -8,12 +8,13 @@ export type FieldType =
   | 'boolean'
   | 'timestamp'
   | 'object'
-  | 'array'
   | 'json'
 
 export type Field = {
   name: string
   type: FieldType
+  /** 배열 여부 (타입 옆에 [] 로 표기). 예: type 'object' + array → object[] */
+  array?: boolean
   /** null 허용 여부 (타입 옆에 ? 로 표기) */
   nullable?: boolean
   /** primary key 여부 */
