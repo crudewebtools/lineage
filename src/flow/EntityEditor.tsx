@@ -62,7 +62,11 @@ export function EntityEditor({ nodes, setNodes }: Props) {
           ])
         } else {
           setNodes((nds) =>
-            nds.map((n) => (n.id === editing ? { ...n, data } : n)),
+            nds.map((n) =>
+              n.id === editing
+                ? { ...n, data: { ...data, collapsed: n.data.collapsed } }
+                : n,
+            ),
           )
         }
         setEditing(null)

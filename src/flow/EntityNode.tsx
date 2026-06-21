@@ -1,7 +1,10 @@
-import { Handle, Position } from '@xyflow/react'
+import { useContext, useEffect, useMemo } from 'react'
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
-import { KeyRound } from 'lucide-react'
+import { ChevronDown, ChevronRight, KeyRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { EntityNodeContext } from './entity-node-context'
 import { KIND_META } from './entity-kind'
 import type { EntityData, Field } from './types'
 
@@ -17,60 +20,136 @@ const handleStyle = {
   transform: 'translateY(-50%)',
 }
 
+// 접힌 컨테이너의 핸들 — 롤업 엣지가 붙는 자리. 일반 핸들과 구분되게 흐리게.
+const collapsedHandleStyle = { ...handleStyle, background: 'var(--border)' }
+
+// 안 보이는 핸들 — DOM 에는 남겨 측정은 유지하되(접기/펴기 시 #008 방지) 시각·연결만 끈다.
+const hiddenHandleStyle = {
+  ...handleStyle,
+  opacity: 0,
+  pointerEvents: 'none' as const,
+}
+
 function FieldRow({
   field,
   depth,
   path,
+  nodeId,
+  collapsed,
+  hidden = false,
 }: {
   field: Field
   depth: number
   /** 필드 경로 — 핸들 id 로 쓰여 필드 단위 연결을 가능하게 한다 */
   path: string
+  nodeId: string
+  /** 이 노드에서 접힌 object 경로 집합 */
+  collapsed: Set<string>
+  /** 조상이 접혀 있어 이 행이 화면에서 접혔는지 */
+  hidden?: boolean
 }) {
+  const { onToggleCollapse } = useContext(EntityNodeContext)
   const children = field.children ?? []
-  // object / object[] 는 컨테이너 → 핸들을 아예 노출하지 않아 연결을 막는다.
-  // lineage 는 컨테이너가 아니라 리프(말단) 필드 단위로 잇는다.
-  const connectable = field.type !== 'object'
+  const isObject = field.type === 'object'
+  const collapsible = isObject && children.length > 0
+  const isCollapsed = collapsible && collapsed.has(path)
+
+  // 핸들은 늘 mount 한다 → 접기/펴기로 추가·삭제되지 않아 React Flow #008 경고를 피한다.
+  // 보임/연결 여부만 제어한다:
+  //  - 리프(보임)   : 일반 핸들, 연결 가능
+  //  - object 펼침  : 투명 핸들(컨테이너 직접 연결 금지)
+  //  - object 접힘  : 흐린 핸들(롤업 엣지가 붙음), 비연결
+  //  - 접혀 숨은 행 : 투명 핸들(측정만)
+  const connectable = !isObject && !hidden
+  const handleVisible = hidden ? false : isObject ? isCollapsed : true
+  const hStyle = !handleVisible
+    ? hiddenHandleStyle
+    : isCollapsed
+      ? collapsedHandleStyle
+      : handleStyle
+
   return (
     <>
       <div
-        className="relative flex items-center gap-2 border-t border-border/60 py-1.5 pr-3 text-xs hover:bg-accent/40"
-        style={{ paddingLeft: 12 + depth * 16 }}
-      >
-        {/* 도착 핸들 (왼쪽) — 컨테이너 필드는 제외 */}
-        {connectable && (
-          <Handle type="target" position={Position.Left} id={path} style={handleStyle} />
+        className={cn(
+          'relative flex items-center gap-2 text-xs',
+          hidden
+            ? 'h-0 overflow-hidden border-0 p-0 opacity-0'
+            : 'border-t border-border/60 py-1.5 pr-3 hover:bg-accent/40',
+          collapsible && !hidden && 'cursor-pointer select-none',
         )}
+        style={{ paddingLeft: hidden ? 0 : 12 + depth * 16 }}
+        onClick={
+          collapsible && !hidden
+            ? (e) => {
+                e.stopPropagation()
+                onToggleCollapse(nodeId, path)
+              }
+            : undefined
+        }
+        aria-hidden={hidden || undefined}
+      >
+        {/* 도착 핸들 (왼쪽) */}
+        <Handle
+          type="target"
+          position={Position.Left}
+          id={path}
+          isConnectable={connectable}
+          style={hStyle}
+        />
 
         {field.pk && <KeyRound className="size-3 shrink-0 text-amber-500" />}
         <span className="font-medium">{field.name}</span>
+        {collapsible &&
+          (isCollapsed ? (
+            <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+          ))}
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
           {field.type}
           {field.array ? '[]' : ''}
           {field.nullable ? '?' : ''}
         </span>
 
-        {/* 출발 핸들 (오른쪽) — 컨테이너 필드는 제외 */}
-        {connectable && (
-          <Handle type="source" position={Position.Right} id={path} style={handleStyle} />
-        )}
+        {/* 출발 핸들 (오른쪽) */}
+        <Handle
+          type="source"
+          position={Position.Right}
+          id={path}
+          isConnectable={connectable}
+          style={hStyle}
+        />
       </div>
 
+      {/* 하위 필드는 항상 렌더하되, 접혀 있으면 hidden 으로 화면에서만 접는다
+          (핸들을 unmount 하지 않아야 펼칠 때 엣지가 끊기지 않는다) */}
       {children.map((child) => (
         <FieldRow
           key={child.name}
           field={child}
           depth={depth + 1}
           path={`${path}.${child.name}`}
+          nodeId={nodeId}
+          collapsed={collapsed}
+          hidden={hidden || isCollapsed}
         />
       ))}
     </>
   )
 }
 
-export function EntityNode({ data }: NodeProps<EntityNodeType>) {
+export function EntityNode({ id, data }: NodeProps<EntityNodeType>) {
   const meta = KIND_META[data.kind]
   const Icon = meta.icon
+  const collapsed = useMemo(() => new Set(data.collapsed ?? []), [data.collapsed])
+
+  // 접기/펴기로 핸들 위치가 바뀌면 React Flow 에 재측정을 알려 엣지 끝점을 갱신
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => {
+    updateNodeInternals(id)
+  }, [id, data.collapsed, updateNodeInternals])
+
   return (
     <div className="min-w-[220px] overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-md">
       {/* 헤더: 종류 아이콘 + 엔티티 이름 + 종류 라벨 */}
@@ -88,7 +167,14 @@ export function EntityNode({ data }: NodeProps<EntityNodeType>) {
       {/* 필드 목록 */}
       <div className="py-0.5">
         {data.fields.map((field) => (
-          <FieldRow key={field.name} field={field} depth={0} path={field.name} />
+          <FieldRow
+            key={field.name}
+            field={field}
+            depth={0}
+            path={field.name}
+            nodeId={id}
+            collapsed={collapsed}
+          />
         ))}
       </div>
     </div>

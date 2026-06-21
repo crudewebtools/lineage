@@ -29,6 +29,8 @@ export type EntityData = {
   name: string
   kind: EntityKind
   fields: Field[]
+  /** 그래프에서 접힌 object 필드 경로들. 하위 필드를 숨기고, 그쪽으로 향하던 엣지는 컨테이너로 롤업한다. */
+  collapsed?: string[]
 }
 
 // 매핑 종류: keep = 값이 그대로 유지(실선), transform = 가공/입력으로 사용(점선)
