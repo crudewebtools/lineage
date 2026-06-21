@@ -127,7 +127,7 @@ export const mappings: FieldMapping[] = [
   { id: 'm4', source: 'orderEvent', sourceField: 'items.quantity', target: 'fulfillment', targetField: 'order.items.quantity' },
   // CustomerApi → FulfillmentRequest.customer
   { id: 'm5', source: 'customerApi', sourceField: 'id', target: 'fulfillment', targetField: 'customer.id' },
-  { id: 'm6', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email', kind: 'transform' },
+  { id: 'm6', source: 'customerApi', sourceField: 'email', target: 'fulfillment', targetField: 'customer.email', kind: 'transform', label: '소문자 정규화' },
   { id: 'm7', source: 'customerApi', sourceField: 'address.city', target: 'fulfillment', targetField: 'customer.city' },
   // AccountDb → FulfillmentRequest
   { id: 'm8', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },

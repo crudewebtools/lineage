@@ -8,8 +8,8 @@ const TYPE_OPTIONS: { kind: MappingKind; label: string; dash: boolean }[] = [
   { kind: 'transform', label: '가공 (점선)', dash: true },
 ]
 
-// 엣지 클릭 시 뜨는 컨텍스트 메뉴 — 캡션 수정 · 타입 변경 · 삭제.
-// 캡션/타입 편집 중에는 떠 있고, 삭제·바깥 클릭·Esc 로 닫힌다.
+// 엣지 클릭 시 뜨는 컨텍스트 메뉴 — 라벨 수정 · 타입 변경 · 삭제.
+// 라벨/타입 편집 중에는 떠 있고, 삭제·바깥 클릭·Esc 로 닫힌다.
 export function EdgeContextMenu({
   edge,
   x,
@@ -44,10 +44,10 @@ export function EdgeContextMenu({
       style={{ top: y, left: x }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* 캡션 수정 */}
+      {/* 라벨 수정 */}
       <div className="px-2 py-2">
         <span className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          캡션
+          라벨
         </span>
         <input
           autoFocus
@@ -56,7 +56,7 @@ export function EdgeContextMenu({
           onKeyDown={(e) => {
             if (e.key === 'Enter') onClose()
           }}
-          placeholder="캡션 입력…"
+          placeholder="라벨 입력…"
           className="h-7 w-full rounded border border-input bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
       </div>

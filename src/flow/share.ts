@@ -1,0 +1,142 @@
+import {
+  compressToEncodedURIComponent,
+  decompressFromEncodedURIComponent,
+} from 'lz-string'
+import { FIELD_TYPES, KINDS, graphFromDoc } from './code'
+import type { EntityNodeType } from './EntityNode'
+import type { MappingEdge } from './edge-kind'
+import type { EntityKind, Field, FieldMapping } from './types'
+
+// 그래프(테이블 + 엣지) 구조를 URL 해시에 싣는다.
+// 압축(lz-string) 전에 "키 없는 튜플 배열"로 패킹해 페이로드를 줄인다 →
+// 반복되던 "id"/"sourceField"/"type" 같은 키와 따옴표·중괄호가 사라져 URL 이 짧아진다.
+const HASH_PREFIX = '#g='
+// 패킹 포맷 버전 — 포맷이 바뀌면 올린다(구버전 URL 구분용)
+const PACK_VERSION = 1
+
+// 필드 플래그 비트마스크 (array/nullable/pk 를 정수 하나로)
+const F_ARRAY = 1
+const F_NULLABLE = 2
+const F_PK = 4
+
+type PackDoc = {
+  entities: { id: string; name: string; kind: EntityKind; fields: Field[] }[]
+  mappings: FieldMapping[]
+}
+
+// ── 패킹: 객체 → 튜플 배열 ────────────────────────────────────────────
+// field  → [name, typeIdx, flags, children?]
+// entity → [id, name, kindIdx, fields]
+// mapping→ [id, source, sourceField, target, targetField, kindIdx?, label?]
+// doc    → [version, entities, mappings]
+function packField(f: Field): unknown[] {
+  let flags = 0
+  if (f.array) flags |= F_ARRAY
+  if (f.nullable) flags |= F_NULLABLE
+  if (f.pk) flags |= F_PK
+  const t: unknown[] = [f.name, FIELD_TYPES.indexOf(f.type), flags]
+  if (f.children && f.children.length) t.push(f.children.map(packField))
+  return t
+}
+
+function packDoc(doc: PackDoc): unknown[] {
+  const entities = doc.entities.map((e) => [
+    e.id,
+    e.name,
+    KINDS.indexOf(e.kind),
+    e.fields.map(packField),
+  ])
+  const mappings = doc.mappings.map((m) => {
+    const t: unknown[] = [m.id, m.source, m.sourceField, m.target, m.targetField]
+    const kindIdx = m.kind === 'transform' ? 1 : 0
+    // kind/label 은 둘 다 끝쪽 선택 항목 — 필요할 때만 덧붙인다(위치 기반).
+    if (kindIdx || m.label) t.push(kindIdx)
+    if (m.label) t.push(m.label)
+    return t
+  })
+  return [PACK_VERSION, entities, mappings]
+}
+
+// ── 언패킹: 튜플 → { entities, mappings } 객체 ────────────────────────
+// 입력은 URL 에서 온 신뢰할 수 없는 값이므로, 빠진 값은 그대로 두고
+// 이후 graphFromDoc 검증에 맡긴다.
+function unpackField(t: unknown): unknown {
+  if (!Array.isArray(t)) return {}
+  const [name, typeIdx, flags, children] = t
+  const f: Record<string, unknown> = {
+    name,
+    type: FIELD_TYPES[typeIdx as number],
+  }
+  const fl = typeof flags === 'number' ? flags : 0
+  if (fl & F_ARRAY) f.array = true
+  if (fl & F_NULLABLE) f.nullable = true
+  if (fl & F_PK) f.pk = true
+  if (Array.isArray(children)) f.children = children.map(unpackField)
+  return f
+}
+
+function unpackDoc(arr: unknown): unknown {
+  if (!Array.isArray(arr)) return null
+  const entities = Array.isArray(arr[1]) ? arr[1] : []
+  const mappings = Array.isArray(arr[2]) ? arr[2] : []
+  return {
+    entities: entities.map((e: unknown) => {
+      const a = Array.isArray(e) ? e : []
+      return {
+        id: a[0],
+        name: a[1],
+        kind: KINDS[a[2] as number],
+        fields: Array.isArray(a[3]) ? a[3].map(unpackField) : [],
+      }
+    }),
+    mappings: mappings.map((m: unknown) => {
+      const a = Array.isArray(m) ? m : []
+      const obj: Record<string, unknown> = {
+        id: a[0],
+        source: a[1],
+        sourceField: a[2],
+        target: a[3],
+        targetField: a[4],
+      }
+      if (a[5] === 1) obj.kind = 'transform'
+      if (typeof a[6] === 'string' && a[6]) obj.label = a[6]
+      return obj
+    }),
+  }
+}
+
+// ── URL 해시 ↔ 그래프 ─────────────────────────────────────────────────
+// 위치 없는 keyed JSON(docJson)을 패킹·압축해 해시 문자열로 만든다.
+export function encodeGraphDoc(docJson: string): string {
+  const doc = JSON.parse(docJson) as PackDoc
+  return HASH_PREFIX + compressToEncodedURIComponent(JSON.stringify(packDoc(doc)))
+}
+
+// 현재 URL 해시에서 그래프를 복원한다. 해시가 없거나 깨졌으면 null.
+export function readGraphFromHash(): {
+  nodes: EntityNodeType[]
+  edges: MappingEdge[]
+} | null {
+  const hash = window.location.hash
+  if (!hash.startsWith(HASH_PREFIX)) return null
+  const packedJson = decompressFromEncodedURIComponent(
+    hash.slice(HASH_PREFIX.length),
+  )
+  if (!packedJson) {
+    console.warn('[lineage] URL 그래프 데이터를 해제하지 못했습니다.')
+    return null
+  }
+  let packed: unknown
+  try {
+    packed = JSON.parse(packedJson)
+  } catch {
+    console.warn('[lineage] URL 그래프 데이터가 손상되었습니다.')
+    return null
+  }
+  const res = graphFromDoc(unpackDoc(packed))
+  if (!res.ok) {
+    console.warn('[lineage] URL 그래프가 유효하지 않습니다:', res.errors)
+    return null
+  }
+  return { nodes: res.nodes, edges: res.edges }
+}

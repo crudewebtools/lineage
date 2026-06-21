@@ -18,12 +18,13 @@
 ## 주요 컨셉
 
 - **필드 ↔ 필드 매핑 (핵심)** — 엣지가 `엔티티A.필드x → 엔티티B.필드y` 단위입니다. **리프(말단) 필드 행만** 좌(도착)·우(출발) 핸들을 갖고, `object`·`object[]` 같은 컨테이너 필드는 핸들을 노출하지 않아 연결할 수 없습니다(컨테이너끼리 잇는 대신 리프 단위로 매핑). 핸들 id 는 **점(.)으로 구분한 필드 경로**(중첩 포함, 예: `address.city`)입니다.
-- **엣지 두 종류** — **실선(`keep`)** 은 값이 그대로 유지됨, **점선(`transform`)** 은 가공됨(trim·포맷 변경·다른 필드 생성의 입력 등). 우상단 `새 엣지` 토글로 그릴 종류를 고르고, 기존 엣지는 **클릭하면 컨텍스트 메뉴**(캡션 수정 · 타입 변경 · 삭제)가 열린다.
+- **엣지 두 종류** — **실선(`keep`)** 은 값이 그대로 유지됨, **점선(`transform`)** 은 가공됨(trim·포맷 변경·다른 필드 생성의 입력 등). 우상단 `새 엣지` 토글로 그릴 종류를 고르고, 기존 엣지는 **클릭하면 컨텍스트 메뉴**(라벨 수정 · 타입 변경 · 삭제)가 열린다.
 - **매핑은 별도 목록** — 엔티티 정의와 분리된 `FieldMapping[]` 로 관리하고 엣지로 변환합니다.
 - **엔티티 = 표 노드** — 헤더(종류 아이콘 + 이름 + 종류 라벨)와 필드 행으로 구성. HTML `<table>` 태그를 강제하지 않습니다.
 - **깊이 = 들여쓰기** — `children` 을 가진 중첩 필드는 depth 에 비례해 indent.
 - **object 접기** — `object`·`object[]` 필드를 클릭하면 하위 필드를 접을 수 있습니다. 접힌 컨테이너 하위로 오가던 엣지는 컨테이너로 **롤업되어 점선**으로 표시됩니다(도착지가 접히면 화살표가 컨테이너로 들어가고, 출발지가 접히면 컨테이너에서 나옵니다). 원본 매핑은 보존되어 펼치면 복원됩니다.
-- **오른쪽 패널** — 존재하는 엔티티 목록 → 클릭 시 필드명·타입 상세. 캔버스 노드를 클릭해도 같은 상세가 열립니다.
+- **오른쪽 패널 (도구 허브)** — `엔터티`(추가·수정)와 `코드` 두 도구. **코드**는 그래프 전체를 JSON 으로 편집하며, **적용 버튼을 눌러야 반영**되고 반영 전에 구조·종류·엔티티/필드 참조를 검증합니다(실시간 아님).
+- **URL 공유** — 테이블·엣지 구조가 바뀌면 URL 해시(`#g=...`)에 실립니다. **키 없는 튜플로 패킹**(enum 인덱스 + 비트플래그)한 뒤 **lz-string 으로 압축**해 URL 을 최대한 짧게 만듭니다(샘플 기준 raw JSON 대비 ~1/3). URL 을 복사해 붙여넣으면 같은 테이블·엣지가 재현됩니다. 노드 **위치·접힘 상태는 제외**(공유 시 재현 불필요)하므로 드래그·접기로는 URL 이 바뀌지 않고, 로드 시 위치는 자동 배치됩니다.
 
 ## 기술 스택
 
@@ -34,6 +35,7 @@
 | 캔버스 | React Flow (`@xyflow/react` v12) |
 | 스타일 | Tailwind CSS v4 (`@tailwindcss/vite`) |
 | UI 컴포넌트 | shadcn/ui (new-york / neutral, Radix UI, lucide-react) |
+| URL 상태 | lz-string (해시 압축 공유) |
 
 ## 시작하기
 
@@ -61,15 +63,21 @@ src/
 ├─ App.tsx                # <Flow /> 렌더
 ├─ index.css              # Tailwind v4 import + shadcn 테마 토큰
 ├─ flow/
-│  ├─ Flow.tsx            # 캔버스 + 오른쪽 패널 레이아웃, 상태·연동
-│  ├─ EntityNode.tsx      # 표 형태 노드 (리프 필드별 좌/우 핸들, 컨테이너는 핸들 없음)
-│  ├─ EntityPanel.tsx     # 오른쪽 패널 (엔티티 목록 + 필드/타입 상세)
-│  ├─ EdgeKindControl.tsx # 새 엣지 종류(유지/가공) 토글
-│  ├─ EdgeContextMenu.tsx # 엣지 클릭 메뉴 (캡션 수정·타입 변경·삭제)
-│  ├─ entity-kind.tsx     # 엔티티 종류별 아이콘·라벨 (노드·패널 공용)
-│  ├─ edge-kind.ts        # 엣지 종류 → 시각 속성(실선/점선)
-│  ├─ sample-data.ts      # 샘플 엔티티 + 필드 매핑
-│  └─ types.ts            # 데이터 모델 (EntityData, Field, FieldMapping, MappingKind)
+│  ├─ Flow.tsx               # 캔버스 + 오른쪽 패널 레이아웃, 상태·연동
+│  ├─ EntityNode.tsx         # 표 형태 노드 (리프별 좌/우 핸들, object 접기 가능)
+│  ├─ entity-node-context.ts # 노드 → 캔버스 접기 토글 통로 (context)
+│  ├─ SidePanel.tsx          # 오른쪽 도구 허브 (엔터티 / 코드)
+│  ├─ EntityEditor.tsx       # 엔티티 추가·수정 폼
+│  ├─ CodeEditor.tsx         # 전체 JSON 편집·검증·적용
+│  ├─ code.ts                # 그래프 ↔ JSON 변환 + 검증
+│  ├─ share.ts               # 그래프 ↔ URL 해시 (튜플 패킹 + lz-string 압축)
+│  ├─ EdgeKindControl.tsx    # 새 엣지 종류(유지/가공) 토글
+│  ├─ EdgeContextMenu.tsx    # 엣지 클릭 메뉴 (라벨 수정·타입 변경·삭제)
+│  ├─ entity-kind.tsx        # 엔티티 종류별 아이콘·라벨 (노드·패널 공용)
+│  ├─ edge-kind.ts           # 엣지 종류 → 시각 속성(실선/점선)
+│  ├─ collapse.ts            # 접힌 컨테이너로 엣지 롤업(점선)
+│  ├─ sample-data.ts         # 샘플 엔티티 + 필드 매핑
+│  └─ types.ts               # 데이터 모델 (EntityData, Field, FieldMapping, MappingKind)
 ├─ components/ui/         # shadcn 컴포넌트 (badge, button)
 └─ lib/
    └─ utils.ts            # cn() className 헬퍼
@@ -141,6 +149,7 @@ type FieldMapping = {
 - [ ] 핸들 시각 정리 — 연결된 핸들만 강조하거나 호버 시에만 노출
 - [ ] 가공(transform) 엣지에 변환 내용(메모) 표시 — 실선/점선 구분은 이미 적용됨
 - [ ] 필드·엣지 클릭 시 연결된 lineage 하이라이트
-- [ ] 실제 스키마(JSON) 주입 및 파서
+- [x] 전체 JSON 코드로 편집·검증·적용 (오른쪽 `코드` 패널)
+- [ ] 외부 스키마(OpenAPI/JSON Schema 등) 임포트 → 엔티티 자동 생성
 - [ ] 다크 모드 토글 (테마 토큰은 이미 준비됨)
 ```

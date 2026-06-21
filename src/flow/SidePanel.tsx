@@ -10,7 +10,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { EntityEditor } from './EntityEditor'
+import { CodeEditor } from './CodeEditor'
 import type { EntityNodeType } from './EntityNode'
+import type { MappingEdge } from './edge-kind'
 
 type View = 'menu' | 'entities' | 'code'
 
@@ -25,18 +27,22 @@ const FEATURES: {
   {
     id: 'code',
     label: '코드',
-    desc: '엔터티·관계 코드 편집',
+    desc: '전체 JSON 편집 · 적용',
     icon: Code2,
-    ready: false,
+    ready: true,
   },
 ]
 
 export function SidePanel({
   nodes,
   setNodes,
+  edges,
+  setEdges,
 }: {
   nodes: EntityNodeType[]
   setNodes: Dispatch<SetStateAction<EntityNodeType[]>>
+  edges: MappingEdge[]
+  setEdges: Dispatch<SetStateAction<MappingEdge[]>>
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [view, setView] = useState<View>('menu')
@@ -93,9 +99,12 @@ export function SidePanel({
           <EntityEditor nodes={nodes} setNodes={setNodes} />
         )}
         {view === 'code' && (
-          <p className="p-4 text-sm text-muted-foreground">
-            코드 편집은 다음 단계에서 추가됩니다.
-          </p>
+          <CodeEditor
+            nodes={nodes}
+            setNodes={setNodes}
+            edges={edges}
+            setEdges={setEdges}
+          />
         )}
       </div>
     </aside>
