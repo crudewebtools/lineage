@@ -19,7 +19,8 @@ import {
   type OnConnect,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { EntityNode, type EntityNodeType } from './EntityNode'
+import { EntityNode } from './EntityNode'
+import { ProcessNode } from './ProcessNode'
 import { EntityNodeContext, EMPTY_HIGHLIGHT } from './entity-node-context'
 import { computeHighlight, hoverSeeds, type HoveredField } from './highlight'
 import { SidePanel } from './SidePanel'
@@ -30,6 +31,7 @@ import { rerouteCollapsedEdges } from './collapse'
 import { graphToDoc } from './code'
 import { encodeGraphDoc, readGraphFromHash } from './share'
 import { initialNodes, initialEdges } from './sample-data'
+import type { AppNode } from './node-types'
 import type { MappingKind } from './types'
 
 // 컨텍스트 메뉴 크기 — 화면 밖으로 나가지 않게 클램프할 때 쓴다
@@ -37,7 +39,10 @@ const MENU_W = 208
 const MENU_H = 220
 
 export default function Flow() {
-  const nodeTypes = useMemo(() => ({ entity: EntityNode }), [])
+  const nodeTypes = useMemo(
+    () => ({ entity: EntityNode, process: ProcessNode }),
+    [],
+  )
 
   const paneRef = useRef<HTMLDivElement>(null)
   // 초기 그래프: URL 해시(#g=...)가 있으면 그것으로, 없으면 샘플 데이터
@@ -45,7 +50,7 @@ export default function Flow() {
     () => readGraphFromHash() ?? { nodes: initialNodes, edges: initialEdges },
     [],
   )
-  const [nodes, setNodes, onNodesChange] = useNodesState<EntityNodeType>(
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(
     initial.nodes,
   )
   const [edges, setEdges, onEdgesChange] = useEdgesState<MappingEdge>(
@@ -108,7 +113,7 @@ export default function Flow() {
     (nodeId: string, path: string) =>
       setNodes((nds) =>
         nds.map((n) => {
-          if (n.id !== nodeId) return n
+          if (n.id !== nodeId || n.type !== 'entity') return n
           const cur = n.data.collapsed ?? []
           const next = cur.includes(path)
             ? cur.filter((p) => p !== path)
@@ -137,9 +142,10 @@ export default function Flow() {
   const highlight = useMemo(() => {
     if (!hovered) return null
     const node = nodes.find((n) => n.id === hovered.nodeId)
-    const seeds = node
-      ? hoverSeeds(hovered, node.data.fields, node.data.collapsed ?? [])
-      : [hovered]
+    const seeds =
+      node && node.type === 'entity'
+        ? hoverSeeds(hovered, node.data.fields, node.data.collapsed ?? [])
+        : [hovered]
     if (!seeds) return null
     return computeHighlight(seeds, edges)
   }, [hovered, nodes, edges])

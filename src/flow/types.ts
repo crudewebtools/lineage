@@ -33,6 +33,16 @@ export type EntityData = {
   collapsed?: string[]
 }
 
+// 입력을 받아 (외부 호출·가공 등) 다른 출력을 내는 "변환/프로세스" 노드.
+// 내부는 블랙박스 — 왼쪽 input 은 받기만(target), 오른쪽 output 은 내보내기만(source).
+// 핸들 경로는 inputs 는 `in.<경로>`, outputs 는 `out.<경로>` 로 구분한다.
+export type ProcessData = {
+  name: string
+  kind: EntityKind
+  inputs: Field[]
+  outputs: Field[]
+}
+
 // 매핑 종류: keep = 값이 그대로 유지(실선), transform = 가공/입력으로 사용(점선)
 export type MappingKind = 'keep' | 'transform'
 

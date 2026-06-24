@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { KIND_META } from './entity-kind'
 import type { EntityNodeType } from './EntityNode'
+import type { AppNode } from './node-types'
 import type { EntityData, EntityKind, Field, FieldType } from './types'
 
 const KINDS: EntityKind[] = ['event', 'api', 'db', 'etc']
@@ -25,8 +26,8 @@ const TYPES: FieldType[] = [
 ]
 
 type Props = {
-  nodes: EntityNodeType[]
-  setNodes: Dispatch<SetStateAction<EntityNodeType[]>>
+  nodes: AppNode[]
+  setNodes: Dispatch<SetStateAction<AppNode[]>>
 }
 
 // null = 목록, 'new' = 추가 폼, string = 해당 id 수정 폼
@@ -34,11 +35,15 @@ type Editing = string | 'new' | null
 
 export function EntityEditor({ nodes, setNodes }: Props) {
   const [editing, setEditing] = useState<Editing>(null)
+  // TODO: 이 패널(도구 > 엔터티 추가·수정)은 추후 전면 재작성 예정.
+  //   - 프로세스 노드 추가/편집 UI 도 그때 함께 다룬다 (지금은 코드 패널·샘플로만).
+  //   - 지금은 entity 노드만 목록/편집한다.
+  const entities = nodes.filter((n): n is EntityNodeType => n.type === 'entity')
 
   if (editing === null) {
     return (
       <EntityList
-        nodes={nodes}
+        nodes={entities}
         onAdd={() => setEditing('new')}
         onEdit={setEditing}
       />
@@ -46,7 +51,9 @@ export function EntityEditor({ nodes, setNodes }: Props) {
   }
 
   const initial =
-    editing === 'new' ? null : (nodes.find((n) => n.id === editing)?.data ?? null)
+    editing === 'new'
+      ? null
+      : (entities.find((n) => n.id === editing)?.data ?? null)
 
   return (
     <EntityForm
@@ -63,7 +70,7 @@ export function EntityEditor({ nodes, setNodes }: Props) {
         } else {
           setNodes((nds) =>
             nds.map((n) =>
-              n.id === editing
+              n.id === editing && n.type === 'entity'
                 ? { ...n, data: { ...data, collapsed: n.data.collapsed } }
                 : n,
             ),
@@ -331,7 +338,7 @@ function toField(d: FieldDraft): Field {
   return f
 }
 
-function uniqueId(name: string, nodes: EntityNodeType[]): string {
+function uniqueId(name: string, nodes: AppNode[]): string {
   const base =
     name
       .trim()
@@ -345,6 +352,6 @@ function uniqueId(name: string, nodes: EntityNodeType[]): string {
   return `${base}_${i}`
 }
 
-function nextPos(nodes: EntityNodeType[]) {
+function nextPos(nodes: AppNode[]) {
   return { x: 320, y: 40 + (nodes.length % 6) * 70 }
 }

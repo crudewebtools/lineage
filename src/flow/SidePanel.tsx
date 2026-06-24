@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { EntityEditor } from './EntityEditor'
 import { CodeEditor } from './CodeEditor'
-import type { EntityNodeType } from './EntityNode'
+import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
 
 type View = 'menu' | 'entities' | 'code'
@@ -39,8 +39,8 @@ export function SidePanel({
   edges,
   setEdges,
 }: {
-  nodes: EntityNodeType[]
-  setNodes: Dispatch<SetStateAction<EntityNodeType[]>>
+  nodes: AppNode[]
+  setNodes: Dispatch<SetStateAction<AppNode[]>>
   edges: MappingEdge[]
   setEdges: Dispatch<SetStateAction<MappingEdge[]>>
 }) {

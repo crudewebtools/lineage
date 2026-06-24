@@ -1,5 +1,5 @@
 import { EDGE_DASH, type MappingEdge } from './edge-kind'
-import type { EntityNodeType } from './EntityNode'
+import type { AppNode } from './node-types'
 
 // 경로의 조상 prefix 중 collapsed 에 든 가장 얕은 것(= 화면에 보이는 컨테이너)을 돌려준다.
 // 예: 'order.items.productId' 에서 collapsed={'order.items'} → 'order.items'
@@ -20,11 +20,11 @@ function collapsedAncestor(path: string, collapsed: Set<string>): string | null 
 // - 출발지가 접히면: 컨테이너에서 화살표가 나온다 (sourceHandle → 컨테이너)
 export function rerouteCollapsedEdges(
   edges: MappingEdge[],
-  nodes: EntityNodeType[],
+  nodes: AppNode[],
 ): MappingEdge[] {
   const collapsedByNode = new Map<string, Set<string>>()
   for (const n of nodes) {
-    const c = n.data.collapsed
+    const c = n.type === 'entity' ? n.data.collapsed : undefined
     if (c && c.length) collapsedByNode.set(n.id, new Set(c))
   }
   if (collapsedByNode.size === 0) return edges

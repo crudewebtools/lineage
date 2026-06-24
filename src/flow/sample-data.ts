@@ -1,10 +1,10 @@
 import { edgeKindProps, type MappingEdge } from './edge-kind'
-import type { EntityNodeType } from './EntityNode'
+import type { AppNode } from './node-types'
 import type { FieldMapping } from './types'
 
 // 시나리오: 카프카 이벤트 수신 → API 조회 → DB 조회 → 외부 시스템으로 전송.
 // 소스 3개(좌)의 필드들이 최종 엔티티(우)의 필드로 매핑된다.
-export const initialNodes: EntityNodeType[] = [
+export const initialNodes: AppNode[] = [
   // ① 카프카로 들어오는 이벤트
   {
     id: 'orderEvent',
@@ -112,6 +112,26 @@ export const initialNodes: EntityNodeType[] = [
         },
         { name: 'plan', type: 'string' },
         { name: 'region', type: 'string' },
+        { name: 'riskScore', type: 'number', nullable: true },
+      ],
+    },
+  },
+  // ⑤ 외부 위험도 평가 API — 입력(orderId, userId)을 받아 출력(riskScore, flaggedAt)을 낸다.
+  //    왼쪽 input 은 받기만(target), 오른쪽 output 은 내보내기만(source). 내부는 블랙박스.
+  {
+    id: 'riskApi',
+    type: 'process',
+    position: { x: 250, y: 640 },
+    data: {
+      name: 'RiskApi',
+      kind: 'api',
+      inputs: [
+        { name: 'orderId', type: 'string' },
+        { name: 'userId', type: 'string' },
+      ],
+      outputs: [
+        { name: 'riskScore', type: 'number' },
+        { name: 'flaggedAt', type: 'timestamp' },
       ],
     },
   },
@@ -132,6 +152,10 @@ export const mappings: FieldMapping[] = [
   // AccountDb → FulfillmentRequest
   { id: 'm8', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
   { id: 'm9', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
+  // OrderEvent → RiskApi(input) / RiskApi(output) → FulfillmentRequest (외부 API 를 거치는 흐름)
+  { id: 'p1', source: 'orderEvent', sourceField: 'orderId', target: 'riskApi', targetField: 'in.orderId' },
+  { id: 'p2', source: 'orderEvent', sourceField: 'userId', target: 'riskApi', targetField: 'in.userId' },
+  { id: 'p3', source: 'riskApi', sourceField: 'out.riskScore', target: 'fulfillment', targetField: 'riskScore', kind: 'transform' },
 ]
 
 // 매핑을 React Flow 엣지로 변환 (핸들 id = 필드 경로)

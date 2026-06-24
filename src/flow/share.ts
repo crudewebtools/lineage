@@ -3,7 +3,7 @@ import {
   decompressFromEncodedURIComponent,
 } from 'lz-string'
 import { FIELD_TYPES, KINDS, graphFromDoc } from './code'
-import type { EntityNodeType } from './EntityNode'
+import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
 import type { EntityKind, Field, FieldMapping } from './types'
 
@@ -11,24 +11,34 @@ import type { EntityKind, Field, FieldMapping } from './types'
 // 압축(lz-string) 전에 "키 없는 튜플 배열"로 패킹해 페이로드를 줄인다 →
 // 반복되던 "id"/"sourceField"/"type" 같은 키와 따옴표·중괄호가 사라져 URL 이 짧아진다.
 const HASH_PREFIX = '#g='
-// 패킹 포맷 버전 — 포맷이 바뀌면 올린다(구버전 URL 구분용)
-const PACK_VERSION = 1
+// 패킹 포맷 버전. v2 에서 processes 배열 추가 (언패킹은 v1 도 지원).
+const PACK_VERSION = 2
 
 // 필드 플래그 비트마스크 (array/nullable/pk 를 정수 하나로)
 const F_ARRAY = 1
 const F_NULLABLE = 2
 const F_PK = 4
 
+type PackEntity = { id: string; name: string; kind: EntityKind; fields: Field[] }
+type PackProcess = {
+  id: string
+  name: string
+  kind: EntityKind
+  inputs: Field[]
+  outputs: Field[]
+}
 type PackDoc = {
-  entities: { id: string; name: string; kind: EntityKind; fields: Field[] }[]
+  entities: PackEntity[]
+  processes?: PackProcess[]
   mappings: FieldMapping[]
 }
 
 // ── 패킹: 객체 → 튜플 배열 ────────────────────────────────────────────
 // field  → [name, typeIdx, flags, children?]
 // entity → [id, name, kindIdx, fields]
+// process→ [id, name, kindIdx, inputs, outputs]
 // mapping→ [id, source, sourceField, target, targetField, kindIdx?, label?]
-// doc    → [version, entities, mappings]
+// doc    → [version, entities, processes, mappings]
 function packField(f: Field): unknown[] {
   let flags = 0
   if (f.array) flags |= F_ARRAY
@@ -46,6 +56,13 @@ function packDoc(doc: PackDoc): unknown[] {
     KINDS.indexOf(e.kind),
     e.fields.map(packField),
   ])
+  const processes = (doc.processes ?? []).map((p) => [
+    p.id,
+    p.name,
+    KINDS.indexOf(p.kind),
+    p.inputs.map(packField),
+    p.outputs.map(packField),
+  ])
   const mappings = doc.mappings.map((m) => {
     const t: unknown[] = [m.id, m.source, m.sourceField, m.target, m.targetField]
     const kindIdx = m.kind === 'transform' ? 1 : 0
@@ -54,7 +71,7 @@ function packDoc(doc: PackDoc): unknown[] {
     if (m.label) t.push(m.label)
     return t
   })
-  return [PACK_VERSION, entities, mappings]
+  return [PACK_VERSION, entities, processes, mappings]
 }
 
 // ── 언패킹: 튜플 → { entities, mappings } 객체 ────────────────────────
@@ -77,8 +94,12 @@ function unpackField(t: unknown): unknown {
 
 function unpackDoc(arr: unknown): unknown {
   if (!Array.isArray(arr)) return null
+  const version = arr[0]
+  // v1: [v, entities, mappings] / v2: [v, entities, processes, mappings]
   const entities = Array.isArray(arr[1]) ? arr[1] : []
-  const mappings = Array.isArray(arr[2]) ? arr[2] : []
+  const processes = version !== 1 && Array.isArray(arr[2]) ? arr[2] : []
+  const mappingsArr = version === 1 ? arr[2] : arr[3]
+  const mappings = Array.isArray(mappingsArr) ? mappingsArr : []
   return {
     entities: entities.map((e: unknown) => {
       const a = Array.isArray(e) ? e : []
@@ -87,6 +108,16 @@ function unpackDoc(arr: unknown): unknown {
         name: a[1],
         kind: KINDS[a[2] as number],
         fields: Array.isArray(a[3]) ? a[3].map(unpackField) : [],
+      }
+    }),
+    processes: processes.map((p: unknown) => {
+      const a = Array.isArray(p) ? p : []
+      return {
+        id: a[0],
+        name: a[1],
+        kind: KINDS[a[2] as number],
+        inputs: Array.isArray(a[3]) ? a[3].map(unpackField) : [],
+        outputs: Array.isArray(a[4]) ? a[4].map(unpackField) : [],
       }
     }),
     mappings: mappings.map((m: unknown) => {
@@ -114,7 +145,7 @@ export function encodeGraphDoc(docJson: string): string {
 
 // 현재 URL 해시에서 그래프를 복원한다. 해시가 없거나 깨졌으면 null.
 export function readGraphFromHash(): {
-  nodes: EntityNodeType[]
+  nodes: AppNode[]
   edges: MappingEdge[]
 } | null {
   const hash = window.location.hash

@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import { AlertCircle, Check, Play, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { EntityNodeType } from './EntityNode'
+import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
 import { codeToGraph, graphToCode } from './code'
 
@@ -13,8 +13,8 @@ export function CodeEditor({
   setNodes,
   setEdges,
 }: {
-  nodes: EntityNodeType[]
-  setNodes: Dispatch<SetStateAction<EntityNodeType[]>>
+  nodes: AppNode[]
+  setNodes: Dispatch<SetStateAction<AppNode[]>>
   edges: MappingEdge[]
   setEdges: Dispatch<SetStateAction<MappingEdge[]>>
 }) {
