@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, KeyRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { EntityNodeContext } from './entity-node-context'
+import { fieldKey } from './highlight'
 import { KIND_META } from './entity-kind'
 import type { EntityData, Field } from './types'
 
@@ -48,11 +49,13 @@ function FieldRow({
   /** 조상이 접혀 있어 이 행이 화면에서 접혔는지 */
   hidden?: boolean
 }) {
-  const { onToggleCollapse } = useContext(EntityNodeContext)
+  const { onToggleCollapse, onFieldHover, highlightedFields } =
+    useContext(EntityNodeContext)
   const children = field.children ?? []
   const isObject = field.type === 'object'
   const collapsible = isObject && children.length > 0
   const isCollapsed = collapsible && collapsed.has(path)
+  const isHighlighted = highlightedFields.has(fieldKey(nodeId, path))
 
   // 핸들은 늘 mount 한다 → 접기/펴기로 추가·삭제되지 않아 React Flow #008 경고를 피한다.
   // 보임/연결 여부만 제어한다:
@@ -87,6 +90,12 @@ function FieldRow({
               }
             : undefined
         }
+        onMouseEnter={
+          hidden ? undefined : () => onFieldHover(nodeId, path, true)
+        }
+        onMouseLeave={
+          hidden ? undefined : () => onFieldHover(nodeId, path, false)
+        }
         aria-hidden={hidden || undefined}
       >
         {/* 도착 핸들 (왼쪽) */}
@@ -99,7 +108,14 @@ function FieldRow({
         />
 
         {field.pk && <KeyRound className="size-3 shrink-0 text-amber-500" />}
-        <span className="font-medium">{field.name}</span>
+        <span
+          className={cn(
+            'font-medium',
+            isHighlighted && 'font-bold text-foreground',
+          )}
+        >
+          {field.name}
+        </span>
         {collapsible &&
           (isCollapsed ? (
             <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
