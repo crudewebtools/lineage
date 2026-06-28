@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo } from 'react'
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
-import { ChevronDown, ChevronRight, KeyRound } from 'lucide-react'
+import { ChevronDown, ChevronRight, GitBranch, KeyRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { NodeContext } from './node-context'
@@ -48,13 +48,15 @@ function FieldRow({
   /** 조상이 접혀 있어 이 행이 화면에서 접혔는지 */
   hidden?: boolean
 }) {
-  const { onToggleCollapse, onFieldHover, highlightedFields } =
+  const { onToggleCollapse, onFieldHover, highlightedFields, dimmedFields } =
     useContext(NodeContext)
   const children = field.children ?? []
   const isObject = field.type === 'object'
   const collapsible = isObject && children.length > 0
   const isCollapsed = collapsible && collapsed.has(path)
   const isHighlighted = highlightedFields.has(fieldKey(nodeId, path))
+  // 현재 변형에서 "없는" 필드 → 흐리게. discriminator 는 분기 기준이라 항상 또렷.
+  const isDimmed = dimmedFields.has(fieldKey(nodeId, path))
 
   // 핸들은 늘 mount 한다 → 접기/펴기로 추가·삭제되지 않아 React Flow #008 경고를 피한다.
   // 보임/연결 여부만 제어한다:
@@ -79,6 +81,7 @@ function FieldRow({
             ? 'h-0 overflow-hidden border-0 p-0 opacity-0'
             : 'border-t border-border/60 py-1.5 pr-3 hover:bg-accent/40',
           collapsible && !hidden && 'cursor-pointer select-none',
+          !hidden && isDimmed && 'opacity-35',
         )}
         style={{ paddingLeft: hidden ? 0 : 12 + depth * 16 }}
         onClick={
@@ -107,6 +110,9 @@ function FieldRow({
         />
 
         {field.pk && <KeyRound className="size-3 shrink-0 text-amber-500" />}
+        {field.discriminator && (
+          <GitBranch className="size-3 shrink-0 text-sky-500" />
+        )}
         <span
           className={cn(
             'font-medium',
@@ -121,6 +127,15 @@ function FieldRow({
           ) : (
             <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
           ))}
+        {/* 조건부 필드 — 어떤 변형 값에서만 존재하는지 배지로 표시 (왜 흐려지는지 보임) */}
+        {field.when?.length ? (
+          <Badge
+            variant="outline"
+            className="h-4 shrink-0 border-sky-500/40 px-1 text-[9px] font-normal text-sky-600"
+          >
+            {field.when.join('·')}
+          </Badge>
+        ) : null}
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
           {field.type}
           {field.array ? '[]' : ''}

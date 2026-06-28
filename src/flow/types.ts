@@ -21,6 +21,18 @@ export type Field = {
   pk?: boolean
   /** 중첩 필드 — depth 가 깊어지면 indent 된다 */
   children?: Field[]
+  /**
+   * 입력 변형(discriminated union)의 기준 필드.
+   * 이 필드 값에 따라 같은 엔티티의 다른 필드 유무가 갈린다. enumValues 로 가능한 값을 준다.
+   */
+  discriminator?: boolean
+  /** discriminator 일 때 고를 수 있는 값들 (예: ['NORMAL', 'CANCELED']) */
+  enumValues?: string[]
+  /**
+   * 조건부 존재 — 활성 변형 값이 이 목록 중 하나일 때만 "있는" 필드.
+   * 비우면(없으면) 모든 변형에 공통으로 존재한다. object 에 달면 하위까지 함께 사라진다.
+   */
+  when?: string[]
 }
 
 export type EntityKind = 'event' | 'api' | 'db' | 'etc'
@@ -59,4 +71,9 @@ export type FieldMapping = {
   kind?: MappingKind
   /** 변환 메모 등 (선택) */
   label?: string
+  /**
+   * 조건부 매핑 — 활성 변형 값이 이 목록 중 하나일 때만 "있는" 엣지.
+   * 비우면 항상 존재. (양 끝 필드가 변형으로 사라지면 엣지도 자동으로 흐려진다)
+   */
+  when?: string[]
 }

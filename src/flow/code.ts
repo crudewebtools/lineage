@@ -95,6 +95,7 @@ export function graphToDoc(
     }
     if (e.data?.kind && e.data.kind !== 'keep') m.kind = e.data.kind
     if (typeof e.label === 'string' && e.label) m.label = e.label
+    if (e.data?.when?.length) m.when = e.data.when
     return m
   })
   return { entities, processes, mappings }
@@ -242,6 +243,8 @@ export function graphFromDoc(doc: unknown): ParseResult {
       errors.push(`${where}.kind 는 keep | transform 이어야 합니다.`)
     if (raw.label != null && typeof raw.label !== 'string')
       errors.push(`${where}.label 은 문자열이어야 합니다.`)
+    if (raw.when != null && !isStringArray(raw.when))
+      errors.push(`${where}.when 은 문자열 배열이어야 합니다.`)
   })
 
   if (errors.length) return { ok: false, errors }
@@ -271,15 +274,19 @@ export function graphFromDoc(doc: unknown): ParseResult {
     },
   }))
   const nodes: AppNode[] = [...entityNodes, ...processNodes]
-  const edges: MappingEdge[] = valid.mappings.map((m) => ({
-    id: m.id,
-    source: m.source,
-    sourceHandle: m.sourceField,
-    target: m.target,
-    targetHandle: m.targetField,
-    ...(m.label ? { label: m.label } : {}),
-    ...edgeKindProps(m.kind ?? 'keep'),
-  }))
+  const edges: MappingEdge[] = valid.mappings.map((m) => {
+    const kind = m.kind ?? 'keep'
+    return {
+      id: m.id,
+      source: m.source,
+      sourceHandle: m.sourceField,
+      target: m.target,
+      targetHandle: m.targetField,
+      ...(m.label ? { label: m.label } : {}),
+      style: edgeKindProps(kind).style,
+      data: { kind, ...(m.when?.length ? { when: m.when } : {}) },
+    }
+  })
   return { ok: true, nodes, edges }
 }
 
@@ -313,6 +320,12 @@ function validateFields(
     if (raw.type !== 'object') leaf.add(path)
     if (!FIELD_TYPES.includes(raw.type as FieldType))
       errors.push(`${w}.type 는 ${FIELD_TYPES.join(' | ')} 중 하나여야 합니다.`)
+    if (raw.discriminator != null && typeof raw.discriminator !== 'boolean')
+      errors.push(`${w}.discriminator 는 boolean 이어야 합니다.`)
+    if (raw.enumValues != null && !isStringArray(raw.enumValues))
+      errors.push(`${w}.enumValues 는 문자열 배열이어야 합니다.`)
+    if (raw.when != null && !isStringArray(raw.when))
+      errors.push(`${w}.when 은 문자열 배열이어야 합니다.`)
     if (raw.children != null) {
       if (!Array.isArray(raw.children))
         errors.push(`${w}.children 는 배열이어야 합니다.`)

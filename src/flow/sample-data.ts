@@ -17,6 +17,13 @@ export const initialNodes: AppNode[] = [
         { name: 'eventId', type: 'string', pk: true },
         { name: 'orderId', type: 'string' },
         { name: 'userId', type: 'string' },
+        // 분기 기준(discriminator). 값에 따라 아래 paymentId / cancellation 유무가 갈린다.
+        {
+          name: 'status',
+          type: 'string',
+          discriminator: true,
+          enumValues: ['NORMAL', 'CANCELED'],
+        },
         {
           name: 'items',
           type: 'object',
@@ -27,6 +34,18 @@ export const initialNodes: AppNode[] = [
             { name: 'quantity', type: 'number' },
             { name: 'price', type: 'number' },
             { name: 'discount', type: 'number', nullable: true },
+          ],
+        },
+        // NORMAL 일 때만 결제 정보가 함께 온다
+        { name: 'paymentId', type: 'string', when: ['NORMAL'] },
+        // CANCELED 일 때만 취소 정보(object 통째)가 함께 온다
+        {
+          name: 'cancellation',
+          type: 'object',
+          when: ['CANCELED'],
+          children: [
+            { name: 'reason', type: 'string' },
+            { name: 'refunded', type: 'boolean' },
           ],
         },
         { name: 'occurredAt', type: 'timestamp' },
@@ -112,6 +131,7 @@ export const initialNodes: AppNode[] = [
         },
         { name: 'plan', type: 'string' },
         { name: 'region', type: 'string' },
+        { name: 'paymentId', type: 'string', nullable: true },
         { name: 'riskScore', type: 'number', nullable: true },
       ],
     },
@@ -152,6 +172,8 @@ export const mappings: FieldMapping[] = [
   // AccountDb → FulfillmentRequest
   { id: 'm8', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
   { id: 'm9', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
+  // 조건부 매핑 — NORMAL 일 때만 결제 정보가 흘러간다 (CANCELED 면 양 끝이 흐려짐)
+  { id: 'm10', source: 'orderEvent', sourceField: 'paymentId', target: 'fulfillment', targetField: 'paymentId', when: ['NORMAL'] },
   // OrderEvent → RiskApi(input) / RiskApi(output) → FulfillmentRequest (외부 API 를 거치는 흐름)
   { id: 'p1', source: 'orderEvent', sourceField: 'orderId', target: 'riskApi', targetField: 'in.orderId' },
   { id: 'p2', source: 'orderEvent', sourceField: 'userId', target: 'riskApi', targetField: 'in.userId' },
@@ -159,12 +181,16 @@ export const mappings: FieldMapping[] = [
 ]
 
 // 매핑을 React Flow 엣지로 변환 (핸들 id = 필드 경로)
-export const initialEdges: MappingEdge[] = mappings.map((m) => ({
-  id: m.id,
-  source: m.source,
-  sourceHandle: m.sourceField,
-  target: m.target,
-  targetHandle: m.targetField,
-  label: m.label,
-  ...edgeKindProps(m.kind ?? 'keep'),
-}))
+export const initialEdges: MappingEdge[] = mappings.map((m) => {
+  const kind = m.kind ?? 'keep'
+  return {
+    id: m.id,
+    source: m.source,
+    sourceHandle: m.sourceField,
+    target: m.target,
+    targetHandle: m.targetField,
+    label: m.label,
+    style: edgeKindProps(kind).style,
+    data: { kind, ...(m.when?.length ? { when: m.when } : {}) },
+  }
+})

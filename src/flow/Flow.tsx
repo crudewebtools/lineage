@@ -25,6 +25,8 @@ import { NodeContext, EMPTY_HIGHLIGHT } from './node-context'
 import { computeHighlight, hoverSeeds, type HoveredField } from './highlight'
 import { SidePanel } from './SidePanel'
 import { EdgeKindControl } from './EdgeKindControl'
+import { VariantControl } from './VariantControl'
+import { collectDiscriminators, computeDimmed, discKey } from './variant'
 import { EdgeContextMenu } from './EdgeContextMenu'
 import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { rerouteCollapsedEdges } from './collapse'
@@ -63,6 +65,8 @@ export default function Flow() {
   )
   // 호버 중인 필드 (계보 하이라이트의 시작점)
   const [hovered, setHovered] = useState<HoveredField | null>(null)
+  // 변형 선택 — discriminator 키 → 고른 값. 비어 있으면 첫 enum 값을 기본으로 본다.
+  const [variant, setVariant] = useState<Record<string, string>>({})
 
   // 새 연결은 현재 선택된 종류(유지/가공)로 생성
   const onConnect: OnConnect = useCallback(
@@ -150,33 +154,53 @@ export default function Flow() {
     return computeHighlight(seeds, edges)
   }, [hovered, nodes, edges])
 
+  // 그래프 안의 discriminator 들과, 현재 선택으로 정해지는 활성 변형 값 집합.
+  const discriminators = useMemo(() => collectDiscriminators(nodes), [nodes])
+  const activeValues = useMemo(() => {
+    const s = new Set<string>()
+    for (const d of discriminators)
+      s.add(variant[discKey(d.nodeId, d.path)] ?? d.values[0])
+    return s
+  }, [discriminators, variant])
+
+  // 현재 변형에서 "없는" 필드·엣지 (흐리게 표시할 대상)
+  const dimmed = useMemo(
+    () => computeDimmed(nodes, edges, activeValues),
+    [nodes, edges, activeValues],
+  )
+
+  const onSelectVariant = useCallback(
+    (key: string, value: string) =>
+      setVariant((cur) => ({ ...cur, [key]: value })),
+    [],
+  )
+
   const nodeCtx = useMemo(
     () => ({
       onToggleCollapse: toggleCollapse,
       onFieldHover,
       highlightedFields: highlight?.fields ?? EMPTY_HIGHLIGHT,
+      dimmedFields: dimmed.fields,
     }),
-    [toggleCollapse, onFieldHover, highlight],
+    [toggleCollapse, onFieldHover, highlight, dimmed],
   )
 
-  // 화면에 그릴 엣지 — 접힌 컨테이너로 롤업하고, 하이라이트된 엣지는 진하고 굵게.
+  // 화면에 그릴 엣지 — 접힌 컨테이너로 롤업하고, 하이라이트는 진하게, 변형에 없는 엣지는 흐리게.
+  // 우선순위: 하이라이트(호버) > dim(변형). 호버한 엣지는 dim 이어도 또렷이 보인다.
   const displayEdges = useMemo(() => {
     const rerouted = rerouteCollapsedEdges(edges, nodes)
-    if (!highlight) return rerouted
-    return rerouted.map((e) =>
-      highlight.edges.has(e.id)
-        ? {
-            ...e,
-            style: {
-              ...e.style,
-              stroke: 'var(--foreground)',
-              strokeWidth: 2.5,
-            },
-            zIndex: 1000,
-          }
-        : e,
-    )
-  }, [edges, nodes, highlight])
+    return rerouted.map((e) => {
+      if (highlight?.edges.has(e.id))
+        return {
+          ...e,
+          style: { ...e.style, stroke: 'var(--foreground)', strokeWidth: 2.5 },
+          zIndex: 1000,
+        }
+      if (dimmed.edges.has(e.id))
+        return { ...e, style: { ...e.style, opacity: 0.12 }, zIndex: 0 }
+      return e
+    })
+  }, [edges, nodes, highlight, dimmed])
 
   // 그래프(테이블·엣지) 구조를 URL 해시에 동기화한다.
   // graphToDoc 은 위치·접힘을 빼므로, 드래그·접기로는 docJson 이 안 바뀌어
@@ -217,12 +241,11 @@ export default function Flow() {
           <Controls />
           <MiniMap pannable zoomable />
           <Panel position="top-left">
-            <div className="rounded-md border border-border bg-card/90 px-3 py-1.5 text-sm font-semibold shadow-sm backdrop-blur">
-              lineage{' '}
-              <span className="font-normal text-muted-foreground">
-                · field mapping (prototype)
-              </span>
-            </div>
+            <VariantControl
+              discriminators={discriminators}
+              selections={variant}
+              onChange={onSelectVariant}
+            />
           </Panel>
           <Panel position="top-right">
             <div className="flex flex-col items-end gap-1">
