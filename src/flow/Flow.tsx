@@ -21,7 +21,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { EntityNode } from './EntityNode'
 import { ProcessNode } from './ProcessNode'
-import { EntityNodeContext, EMPTY_HIGHLIGHT } from './entity-node-context'
+import { NodeContext, EMPTY_HIGHLIGHT } from './node-context'
 import { computeHighlight, hoverSeeds, type HoveredField } from './highlight'
 import { SidePanel } from './SidePanel'
 import { EdgeKindControl } from './EdgeKindControl'
@@ -193,7 +193,7 @@ export default function Flow() {
   }, [docJson])
 
   return (
-    <EntityNodeContext.Provider value={nodeCtx}>
+    <NodeContext.Provider value={nodeCtx}>
     <div className="flex h-full w-full">
       <div ref={paneRef} className="relative h-full flex-1">
         <ReactFlow
@@ -254,6 +254,6 @@ export default function Flow() {
         setEdges={setEdges}
       />
     </div>
-    </EntityNodeContext.Provider>
+    </NodeContext.Provider>
   )
 }

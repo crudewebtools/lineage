@@ -68,8 +68,8 @@ src/
 │  ├─ Flow.tsx               # 캔버스 + 오른쪽 패널 레이아웃, 상태·연동
 │  ├─ EntityNode.tsx         # 표 형태 노드 (리프별 좌/우 핸들, object 접기 가능)
 │  ├─ ProcessNode.tsx        # 변환/프로세스 노드 (왼쪽 input / 오른쪽 output)
-│  ├─ node-types.ts          # 노드 유니온 (EntityNodeType | ProcessNodeType = AppNode)
-│  ├─ entity-node-context.ts # 노드 → 캔버스 접기·호버 통로 (context)
+│  ├─ node-types.ts          # 노드 타입 정의 (EntityNodeType | ProcessNodeType = AppNode)
+│  ├─ node-context.ts        # 노드 → 캔버스 접기·호버 통로 (context, 노드 공용)
 │  ├─ SidePanel.tsx          # 오른쪽 도구 허브 (엔터티 / 코드)
 │  ├─ EntityEditor.tsx       # 엔티티 추가·수정 폼
 │  ├─ CodeEditor.tsx         # 전체 JSON 편집·검증·적용
@@ -82,8 +82,8 @@ src/
 │  ├─ collapse.ts            # 접힌 컨테이너로 엣지 롤업(점선)
 │  ├─ highlight.ts           # 호버한 필드의 lineage(필드·엣지) closure 계산
 │  ├─ sample-data.ts         # 샘플 엔티티 + 필드 매핑
-│  └─ types.ts               # 데이터 모델 (EntityData, Field, FieldMapping, MappingKind)
-├─ components/ui/         # shadcn 컴포넌트 (badge, button)
+│  └─ types.ts               # 데이터 모델 (EntityData, ProcessData, Field, FieldMapping, MappingKind 등)
+├─ components/ui/         # shadcn 컴포넌트 (badge, button, input)
 └─ lib/
    └─ utils.ts            # cn() className 헬퍼
 ```
@@ -106,6 +106,16 @@ type EntityData = {
   name: string
   kind: 'event' | 'api' | 'db' | 'etc'  // kafka 이벤트 / API 응답 / DB / 기타(DTO 등)
   fields: Field[]
+  collapsed?: string[]  // 접힌 object 필드 경로들 (하위 숨김 + 엣지 롤업). 그래프 상태라 공유 URL 엔 제외
+}
+
+// 변환/프로세스 노드 — 입력을 받아 다른 출력을 내는 블랙박스.
+// input 은 받기만(target), output 은 내보내기만(source). 핸들 경로는 in.<>/out.<>.
+type ProcessData = {
+  name: string
+  kind: 'event' | 'api' | 'db' | 'etc'
+  inputs: Field[]
+  outputs: Field[]
 }
 
 // 엣지 종류: keep = 값 유지(실선), transform = 가공(점선)

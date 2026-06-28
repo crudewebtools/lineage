@@ -10,20 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { KIND_META } from './entity-kind'
-import type { EntityNodeType } from './EntityNode'
-import type { AppNode } from './node-types'
+import type { AppNode, EntityNodeType } from './node-types'
+import { FIELD_TYPES, KINDS } from './code'
 import type { EntityData, EntityKind, Field, FieldType } from './types'
-
-const KINDS: EntityKind[] = ['event', 'api', 'db', 'etc']
-const TYPES: FieldType[] = [
-  'uuid',
-  'string',
-  'number',
-  'boolean',
-  'timestamp',
-  'object',
-  'json',
-]
 
 type Props = {
   nodes: AppNode[]
@@ -144,12 +133,11 @@ function EntityForm({
   onSave: (data: EntityData) => void
   onCancel: () => void
 }) {
-  const nextKey = useRef(0)
   const [name, setName] = useState(initial?.name ?? '')
   const [kind, setKind] = useState<EntityKind>(initial?.kind ?? 'etc')
   const [fields, setFields] = useState<FieldDraft[]>(() =>
-    (initial?.fields ?? [{ name: '', type: 'string' as FieldType }]).map((f) => ({
-      _k: nextKey.current++,
+    (initial?.fields ?? [{ name: '', type: 'string' as FieldType }]).map((f, i) => ({
+      _k: i,
       name: f.name,
       type: f.type,
       array: Boolean((f as Field).array),
@@ -158,6 +146,7 @@ function EntityForm({
       children: (f as Field).children,
     })),
   )
+  const nextKey = useRef(fields.length)
   const [error, setError] = useState<string | null>(null)
 
   const patch = (k: number, p: Partial<FieldDraft>) =>
@@ -240,7 +229,7 @@ function EntityForm({
               onChange={(e) => patch(f._k, { type: e.target.value as FieldType })}
               className="h-8 w-28 rounded-md border border-input bg-transparent px-1 text-xs"
             >
-              {TYPES.map((t) => (
+              {FIELD_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>

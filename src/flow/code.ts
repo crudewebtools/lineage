@@ -1,5 +1,4 @@
-import type { EntityNodeType } from './EntityNode'
-import type { AppNode, ProcessNodeType } from './node-types'
+import type { AppNode, EntityNodeType, ProcessNodeType } from './node-types'
 import { edgeKindProps, type MappingEdge } from './edge-kind'
 import type {
   EntityKind,

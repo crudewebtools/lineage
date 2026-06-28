@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { EntityNodeContext } from './entity-node-context'
+import { NodeContext } from './node-context'
 import { fieldKey } from './highlight'
 import { KIND_META } from './entity-kind'
 import type { ProcessNodeType } from './node-types'
@@ -29,7 +29,7 @@ function IoRow({
   side: 'in' | 'out'
   field: Field
 }) {
-  const { onFieldHover, highlightedFields } = useContext(EntityNodeContext)
+  const { onFieldHover, highlightedFields } = useContext(NodeContext)
   const path = `${side}.${field.name}`
   const isHighlighted = highlightedFields.has(fieldKey(nodeId, path))
   return (

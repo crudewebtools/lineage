@@ -1,15 +1,14 @@
 import { useContext, useEffect, useMemo } from 'react'
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import type { Node, NodeProps } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight, KeyRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { EntityNodeContext } from './entity-node-context'
+import { NodeContext } from './node-context'
 import { fieldKey } from './highlight'
 import { KIND_META } from './entity-kind'
-import type { EntityData, Field } from './types'
-
-export type EntityNodeType = Node<EntityData, 'entity'>
+import type { EntityNodeType } from './node-types'
+import type { Field } from './types'
 
 // 모든 필드 행이 양쪽에 핸들을 가진다(좌=target, 우=source).
 // overflow-hidden 부모에 가려지지 않도록 X 이동 없이 모서리 안쪽에 붙인다.
@@ -50,7 +49,7 @@ function FieldRow({
   hidden?: boolean
 }) {
   const { onToggleCollapse, onFieldHover, highlightedFields } =
-    useContext(EntityNodeContext)
+    useContext(NodeContext)
   const children = field.children ?? []
   const isObject = field.type === 'object'
   const collapsible = isObject && children.length > 0
