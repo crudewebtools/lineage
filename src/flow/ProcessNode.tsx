@@ -1,6 +1,7 @@
 import { useContext } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
+import { Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { NodeContext } from './node-context'
@@ -63,11 +64,12 @@ function IoRow({
 }
 
 export function ProcessNode({ id, data }: NodeProps<ProcessNodeType>) {
+  const { onEditProcess } = useContext(NodeContext)
   const meta = KIND_META[data.kind]
   const Icon = meta.icon
   return (
     <div className="min-w-[300px] overflow-hidden rounded-lg border border-dashed border-border bg-card text-card-foreground shadow-md">
-      {/* 헤더: 종류 아이콘 + 이름 + 종류 라벨 */}
+      {/* 헤더: 종류 아이콘 + 이름 + 종류 라벨 + 수정 */}
       <div className="flex items-center gap-2 bg-muted/60 px-3 py-2">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="text-sm font-semibold">{data.name}</span>
@@ -77,6 +79,17 @@ export function ProcessNode({ id, data }: NodeProps<ProcessNodeType>) {
         >
           {meta.label}
         </Badge>
+        <button
+          type="button"
+          className="nodrag rounded p-0.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          title="프로세스 수정"
+          onClick={(e) => {
+            e.stopPropagation()
+            onEditProcess(id)
+          }}
+        >
+          <Pencil className="size-3.5" />
+        </button>
       </div>
 
       {/* 좌(input) / 우(output) 2단 — 가운데 점선으로 블랙박스 경계 */}

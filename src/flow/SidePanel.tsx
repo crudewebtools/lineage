@@ -1,6 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import {
-  Boxes,
   ChevronLeft,
   Code2,
   PanelRightClose,
@@ -9,12 +8,12 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { EntityEditor } from './EntityEditor'
 import { CodeEditor } from './CodeEditor'
 import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
 
-type View = 'menu' | 'entities' | 'code'
+// 엔터티 추가·수정은 캔버스 모달(EntityDialog)로 옮겼고, 여기엔 코드 도구만 남는다.
+type View = 'menu' | 'code'
 
 const FEATURES: {
   id: Exclude<View, 'menu'>
@@ -23,7 +22,6 @@ const FEATURES: {
   icon: LucideIcon
   ready: boolean
 }[] = [
-  { id: 'entities', label: '엔터티', desc: '추가 · 수정', icon: Boxes, ready: true },
   {
     id: 'code',
     label: '코드',
@@ -95,9 +93,6 @@ export function SidePanel({
 
       <div className="flex-1 overflow-y-auto">
         {view === 'menu' && <Menu onOpen={setView} />}
-        {view === 'entities' && (
-          <EntityEditor nodes={nodes} setNodes={setNodes} />
-        )}
         {view === 'code' && (
           <CodeEditor
             nodes={nodes}

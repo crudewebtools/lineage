@@ -1,0 +1,137 @@
+import { useState, type ReactNode } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
+import { KIND_META } from './entity-kind'
+import { KINDS } from './code'
+import { FieldTreeEditor } from './FieldTreeEditor'
+import { toDraft, toField, validate } from './field-draft'
+import type { EntityKind, ProcessData } from './types'
+
+// 변환/프로세스 노드(블랙박스) 생성·수정 모달.
+// input(받기)·output(내보내기) 두 플랫 리스트를 나란히 편집한다.
+// 핸들 경로가 in.<name>/out.<name> 한 단계라 중첩(object 하위)은 두지 않는다.
+export function ProcessDialog({
+  isNew,
+  initial,
+  onSave,
+  onClose,
+}: {
+  isNew: boolean
+  initial: ProcessData | null
+  onSave: (data: ProcessData) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState(initial?.name ?? '')
+  const [kind, setKind] = useState<EntityKind>(initial?.kind ?? 'api')
+  const [inputs, setInputs] = useState(() => toDraft(initial?.inputs ?? []))
+  const [outputs, setOutputs] = useState(() => toDraft(initial?.outputs ?? []))
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSave = () => {
+    const nm = name.trim()
+    if (!nm) return setError('프로세스 이름을 입력하세요')
+    const ei = validate(inputs, 'input')
+    if (ei) return setError(ei)
+    const eo = validate(outputs, 'output')
+    if (eo) return setError(eo)
+    onSave({
+      name: nm,
+      kind,
+      inputs: inputs.map(toField),
+      outputs: outputs.map(toField),
+    })
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[85vh] sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{isNew ? '프로세스 생성' : '프로세스 수정'}</DialogTitle>
+          <DialogDescription>
+            입력을 받아 다른 출력을 내는 변환/프로세스 노드(블랙박스)입니다. 좌측
+            input 은 받기만, 우측 output 은 내보내기만 합니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap gap-3">
+          <Labeled label="이름" className="min-w-[180px] flex-1">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="예: RiskApi"
+              className="h-9"
+              autoFocus
+            />
+          </Labeled>
+          <Labeled label="종류">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as EntityKind)}
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            >
+              {KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_META[k].label}
+                </option>
+              ))}
+            </select>
+          </Labeled>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
+          <FieldTreeEditor
+            title="input (받기)"
+            addLabel="입력 추가"
+            fields={inputs}
+            setFields={setInputs}
+            nested={false}
+          />
+          <FieldTreeEditor
+            title="output (내보내기)"
+            addLabel="출력 추가"
+            fields={outputs}
+            setFields={setOutputs}
+            nested={false}
+          />
+        </div>
+
+        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            취소
+          </Button>
+          <Button size="sm" onClick={handleSave}>
+            저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Labeled({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <label className={cn('flex flex-col gap-1', className)}>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  )
+}

@@ -10,7 +10,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   Panel,
   addEdge,
   useNodesState,
@@ -19,8 +18,13 @@ import {
   type OnConnect,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { EntityNode } from './EntityNode'
 import { ProcessNode } from './ProcessNode'
+import { EntityDialog } from './EntityDialog'
+import { ProcessDialog } from './ProcessDialog'
+import { uniqueId, nextEntityPos } from './entity-util'
 import { NodeContext, EMPTY_HIGHLIGHT } from './node-context'
 import { computeHighlight, hoverSeeds, type HoveredField } from './highlight'
 import { SidePanel } from './SidePanel'
@@ -34,7 +38,7 @@ import { graphToDoc } from './code'
 import { encodeGraphDoc, readGraphFromHash } from './share'
 import { initialNodes, initialEdges } from './sample-data'
 import type { AppNode } from './node-types'
-import type { MappingKind } from './types'
+import type { EntityData, MappingKind, ProcessData } from './types'
 
 // 컨텍스트 메뉴 크기 — 화면 밖으로 나가지 않게 클램프할 때 쓴다
 const MENU_W = 208
@@ -67,6 +71,14 @@ export default function Flow() {
   const [hovered, setHovered] = useState<HoveredField | null>(null)
   // 변형 선택 — discriminator 키 → 고른 값. 비어 있으면 첫 enum 값을 기본으로 본다.
   const [variant, setVariant] = useState<Record<string, string>>({})
+  // 엔터티 생성/수정 모달 상태 (null = 닫힘)
+  const [entityDialog, setEntityDialog] = useState<
+    { mode: 'new' } | { mode: 'edit'; id: string } | null
+  >(null)
+  // 프로세스 생성/수정 모달 상태 (null = 닫힘)
+  const [processDialog, setProcessDialog] = useState<
+    { mode: 'new' } | { mode: 'edit'; id: string } | null
+  >(null)
 
   // 새 연결은 현재 선택된 종류(유지/가공)로 생성
   const onConnect: OnConnect = useCallback(
@@ -175,15 +187,106 @@ export default function Flow() {
     [],
   )
 
+  // 엔터티 수정 모달 열기 (EntityNode 헤더 ✏️)
+  const onEditEntity = useCallback(
+    (id: string) => setEntityDialog({ mode: 'edit', id }),
+    [],
+  )
+
+  // 모달 저장 — 생성이면 새 노드, 수정이면 data 교체(접힘 상태는 보존).
+  // setNodes 는 순수 updater 로만 호출하고(다른 setState 안에 중첩 금지 — StrictMode
+  // 가 updater 를 두 번 호출해 중복 추가될 수 있다), 모달 닫기는 별도로 처리한다.
+  const saveEntity = useCallback(
+    (data: EntityData) => {
+      if (!entityDialog) return
+      if (entityDialog.mode === 'new') {
+        setNodes((nds) => [
+          ...nds,
+          {
+            id: uniqueId(data.name, nds),
+            type: 'entity',
+            position: nextEntityPos(nds),
+            data,
+          },
+        ])
+      } else {
+        const id = entityDialog.id
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === id && n.type === 'entity'
+              ? { ...n, data: { ...data, collapsed: n.data.collapsed } }
+              : n,
+          ),
+        )
+      }
+      setEntityDialog(null)
+    },
+    [entityDialog, setNodes],
+  )
+
+  // 프로세스 수정 모달 열기 (ProcessNode 헤더 ✏️)
+  const onEditProcess = useCallback(
+    (id: string) => setProcessDialog({ mode: 'edit', id }),
+    [],
+  )
+
+  // 프로세스 저장 — 생성이면 새 노드, 수정이면 data 교체. (setNodes 는 순수 updater 로만)
+  const saveProcess = useCallback(
+    (data: ProcessData) => {
+      if (!processDialog) return
+      if (processDialog.mode === 'new') {
+        setNodes((nds) => [
+          ...nds,
+          {
+            id: uniqueId(data.name, nds),
+            type: 'process',
+            position: nextEntityPos(nds),
+            data,
+          },
+        ])
+      } else {
+        const id = processDialog.id
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === id && n.type === 'process' ? { ...n, data } : n,
+          ),
+        )
+      }
+      setProcessDialog(null)
+    },
+    [processDialog, setNodes],
+  )
+
   const nodeCtx = useMemo(
     () => ({
       onToggleCollapse: toggleCollapse,
       onFieldHover,
+      onEditEntity,
+      onEditProcess,
       highlightedFields: highlight?.fields ?? EMPTY_HIGHLIGHT,
       dimmedFields: dimmed.fields,
     }),
-    [toggleCollapse, onFieldHover, highlight, dimmed],
+    [toggleCollapse, onFieldHover, onEditEntity, onEditProcess, highlight, dimmed],
   )
+
+  // 수정 모달에 넘길 초기 데이터 (생성이면 null)
+  const editEntityNode =
+    entityDialog?.mode === 'edit'
+      ? nodes.find((n) => n.id === entityDialog.id)
+      : undefined
+  const entityInitial =
+    editEntityNode && editEntityNode.type === 'entity'
+      ? editEntityNode.data
+      : null
+
+  const editProcessNode =
+    processDialog?.mode === 'edit'
+      ? nodes.find((n) => n.id === processDialog.id)
+      : undefined
+  const processInitial =
+    editProcessNode && editProcessNode.type === 'process'
+      ? editProcessNode.data
+      : null
 
   // 화면에 그릴 엣지 — 접힌 컨테이너로 롤업하고, 하이라이트는 진하게, 변형에 없는 엣지는 흐리게.
   // 우선순위: 하이라이트(호버) > dim(변형). 호버한 엣지는 dim 이어도 또렷이 보인다.
@@ -239,7 +342,6 @@ export default function Flow() {
         >
           <Background gap={16} />
           <Controls />
-          <MiniMap pannable zoomable />
           <Panel position="top-left">
             <VariantControl
               discriminators={discriminators}
@@ -253,6 +355,27 @@ export default function Flow() {
               <span className="rounded bg-card/80 px-1.5 py-0.5 text-[10px] text-muted-foreground backdrop-blur">
                 엣지 클릭 시 메뉴 (라벨·타입·삭제)
               </span>
+            </div>
+          </Panel>
+          <Panel position="bottom-right">
+            <div className="flex flex-col items-end gap-1.5">
+              <Button
+                size="sm"
+                className="gap-1 shadow-md"
+                onClick={() => setEntityDialog({ mode: 'new' })}
+              >
+                <Plus className="size-4" />
+                엔터티 생성
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="gap-1 border border-dashed border-border shadow-md"
+                onClick={() => setProcessDialog({ mode: 'new' })}
+              >
+                <Plus className="size-4" />
+                프로세스 생성
+              </Button>
             </div>
           </Panel>
         </ReactFlow>
@@ -276,6 +399,26 @@ export default function Flow() {
         edges={edges}
         setEdges={setEdges}
       />
+
+      {entityDialog && (
+        <EntityDialog
+          key={entityDialog.mode === 'edit' ? entityDialog.id : 'new'}
+          isNew={entityDialog.mode === 'new'}
+          initial={entityInitial}
+          onSave={saveEntity}
+          onClose={() => setEntityDialog(null)}
+        />
+      )}
+
+      {processDialog && (
+        <ProcessDialog
+          key={processDialog.mode === 'edit' ? processDialog.id : 'new'}
+          isNew={processDialog.mode === 'new'}
+          initial={processInitial}
+          onSave={saveProcess}
+          onClose={() => setProcessDialog(null)}
+        />
+      )}
     </div>
     </NodeContext.Provider>
   )

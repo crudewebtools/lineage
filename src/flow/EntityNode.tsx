@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo } from 'react'
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
-import { ChevronDown, ChevronRight, GitBranch, KeyRound } from 'lucide-react'
+import { ChevronDown, ChevronRight, GitBranch, KeyRound, Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { NodeContext } from './node-context'
@@ -170,6 +170,7 @@ function FieldRow({
 }
 
 export function EntityNode({ id, data }: NodeProps<EntityNodeType>) {
+  const { onEditEntity } = useContext(NodeContext)
   const meta = KIND_META[data.kind]
   const Icon = meta.icon
   const collapsed = useMemo(() => new Set(data.collapsed ?? []), [data.collapsed])
@@ -192,6 +193,17 @@ export function EntityNode({ id, data }: NodeProps<EntityNodeType>) {
         >
           {meta.label}
         </Badge>
+        <button
+          type="button"
+          className="nodrag rounded p-0.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          title="엔터티 수정"
+          onClick={(e) => {
+            e.stopPropagation()
+            onEditEntity(id)
+          }}
+        >
+          <Pencil className="size-3.5" />
+        </button>
       </div>
 
       {/* 필드 목록 */}

@@ -6,17 +6,23 @@ export const EMPTY_HIGHLIGHT: ReadonlySet<string> = new Set()
 // 노드(EntityNode·ProcessNode) → 캔버스(Flow) 로 올려보내는 공용 통로.
 //  - onToggleCollapse: object 필드 접기/펴기 (EntityNode 만 사용)
 //  - onFieldHover    : 필드 호버 시작/끝 알림 (계보 하이라이트용)
+//  - onEditEntity    : 엔터티 수정 모달 열기 (EntityNode 헤더의 ✏️)
+//  - onEditProcess   : 프로세스 수정 모달 열기 (ProcessNode 헤더의 ✏️)
 //  - highlightedFields: 강조할 필드 키(fieldKey) 집합
 //  - dimmedFields    : 현재 변형에서 "없는" 필드 키 집합 (흐리게 표시)
 // 컴포넌트 파일과 분리해 Fast Refresh(react-refresh) 규칙을 지킨다.
 export const NodeContext = createContext<{
   onToggleCollapse: (nodeId: string, path: string) => void
   onFieldHover: (nodeId: string, path: string, entering: boolean) => void
+  onEditEntity: (nodeId: string) => void
+  onEditProcess: (nodeId: string) => void
   highlightedFields: ReadonlySet<string>
   dimmedFields: ReadonlySet<string>
 }>({
   onToggleCollapse: () => {},
   onFieldHover: () => {},
+  onEditEntity: () => {},
+  onEditProcess: () => {},
   highlightedFields: EMPTY_HIGHLIGHT,
   dimmedFields: EMPTY_HIGHLIGHT,
 })
