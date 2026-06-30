@@ -69,6 +69,8 @@ export default function Flow() {
   )
   // 호버 중인 필드 (계보 하이라이트의 시작점)
   const [hovered, setHovered] = useState<HoveredField | null>(null)
+  // 엣지 위에서 좌클릭을 누른 지점 (드래그/클릭 구분용)
+  const edgeDownPos = useRef<{ x: number; y: number } | null>(null)
   // 변형 선택 — discriminator 키 → 고른 값. 비어 있으면 첫 enum 값을 기본으로 본다.
   const [variant, setVariant] = useState<Record<string, string>>({})
   // 엔터티 생성/수정 모달 상태 (null = 닫힘)
@@ -87,8 +89,36 @@ export default function Flow() {
     [setEdges, newEdgeKind],
   )
 
+  // 엣지 위에서 시작한 좌클릭 드래그도 화면 패닝이 되도록 한다.
+  // React Flow 는 모든 엣지 <g> 에 'nopan' 을 붙여 d3-zoom 패닝을 막는데,
+  // mousedown 캡처 단계에서 그 클래스를 떼어내면(다음 렌더에서 자동 복구)
+  // d3-zoom 필터가 패닝을 허용한다. 캡처 단계라 d3-zoom(버블 리스너)의 필터보다
+  // 먼저 실행돼 같은 mousedown 에 반영된다.
+  useEffect(() => {
+    const pane = paneRef.current
+    if (!pane) return
+    const onDown = (e: globalThis.MouseEvent) => {
+      if (e.button !== 0) return
+      const g = (e.target as Element | null)?.closest?.('.react-flow__edge')
+      if (g) {
+        g.classList.remove('nopan')
+        edgeDownPos.current = { x: e.clientX, y: e.clientY }
+      } else {
+        edgeDownPos.current = null
+      }
+    }
+    pane.addEventListener('mousedown', onDown, true)
+    return () => pane.removeEventListener('mousedown', onDown, true)
+  }, [])
+
   // 엣지 클릭/우클릭 → 컨텍스트 메뉴를 커서 위치에 연다 (컨테이너 안으로 클램프)
   const openMenu = useCallback((event: MouseEvent, edge: MappingEdge) => {
+    // 좌클릭이 드래그(패닝)였으면 메뉴를 열지 않는다 — 임계값 5px
+    if (event.type === 'click' && edgeDownPos.current) {
+      const dx = event.clientX - edgeDownPos.current.x
+      const dy = event.clientY - edgeDownPos.current.y
+      if (Math.hypot(dx, dy) > 5) return
+    }
     event.preventDefault()
     const rect = paneRef.current?.getBoundingClientRect()
     if (!rect) return
