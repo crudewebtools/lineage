@@ -29,6 +29,7 @@ import { NodeContext, EMPTY_HIGHLIGHT } from './node-context'
 import { computeHighlight, hoverSeeds, type HoveredField } from './highlight'
 import { SidePanel } from './SidePanel'
 import { EdgeKindControl } from './EdgeKindControl'
+import { NodeVisibilityPanel } from './NodeVisibilityPanel'
 import { VariantControl } from './VariantControl'
 import { collectDiscriminators, computeDimmed, discKey } from './variant'
 import { EdgeContextMenu } from './EdgeContextMenu'
@@ -153,6 +154,23 @@ export default function Flow() {
 
   // 메뉴가 가리키는 엣지 (삭제됐으면 undefined → 메뉴 자동으로 사라짐)
   const menuEdge = menu ? edges.find((e) => e.id === menu.edgeId) : undefined
+
+  // 노드 표시/숨김 토글 — hidden 플래그만 뒤집는다(데이터·위치 보존).
+  // 숨긴 노드에 걸린 엣지는 displayEdges 에서 함께 걸러낸다.
+  const toggleNodeHidden = useCallback(
+    (id: string) =>
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, hidden: !n.hidden } : n)),
+      ),
+    [setNodes],
+  )
+  const showAllNodes = useCallback(
+    () =>
+      setNodes((nds) =>
+        nds.map((n) => (n.hidden ? { ...n, hidden: false } : n)),
+      ),
+    [setNodes],
+  )
 
   // object 필드 접기/펴기 — 해당 노드 data.collapsed 토글
   const toggleCollapse = useCallback(
@@ -321,7 +339,10 @@ export default function Flow() {
   // 화면에 그릴 엣지 — 접힌 컨테이너로 롤업하고, 하이라이트는 진하게, 변형에 없는 엣지는 흐리게.
   // 우선순위: 하이라이트(호버) > dim(변형). 호버한 엣지는 dim 이어도 또렷이 보인다.
   const displayEdges = useMemo(() => {
-    const rerouted = rerouteCollapsedEdges(edges, nodes)
+    const hiddenIds = new Set(nodes.filter((n) => n.hidden).map((n) => n.id))
+    const rerouted = rerouteCollapsedEdges(edges, nodes).filter(
+      (e) => !hiddenIds.has(e.source) && !hiddenIds.has(e.target),
+    )
     return rerouted.map((e) => {
       if (highlight?.edges.has(e.id))
         return {
@@ -380,32 +401,34 @@ export default function Flow() {
             />
           </Panel>
           <Panel position="top-right">
-            <div className="flex flex-col items-end gap-1">
-              <EdgeKindControl value={newEdgeKind} onChange={setNewEdgeKind} />
-              <span className="rounded bg-card/80 px-1.5 py-0.5 text-[10px] text-muted-foreground backdrop-blur">
-                엣지 클릭 시 메뉴 (라벨·타입·삭제)
-              </span>
-            </div>
+            <NodeVisibilityPanel
+              nodes={nodes}
+              onToggle={toggleNodeHidden}
+              onShowAll={showAllNodes}
+            />
           </Panel>
           <Panel position="bottom-right">
-            <div className="flex flex-col items-end gap-1.5">
-              <Button
-                size="sm"
-                className="gap-1 shadow-md"
-                onClick={() => setEntityDialog({ mode: 'new' })}
-              >
-                <Plus className="size-4" />
-                엔터티 생성
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="gap-1 border border-dashed border-border shadow-md"
-                onClick={() => setProcessDialog({ mode: 'new' })}
-              >
-                <Plus className="size-4" />
-                프로세스 생성
-              </Button>
+            <div className="flex flex-col items-end gap-2">
+              <EdgeKindControl value={newEdgeKind} onChange={setNewEdgeKind} />
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  className="gap-1 shadow-md"
+                  onClick={() => setEntityDialog({ mode: 'new' })}
+                >
+                  <Plus className="size-4" />
+                  엔터티
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1 border border-dashed border-border shadow-md"
+                  onClick={() => setProcessDialog({ mode: 'new' })}
+                >
+                  <Plus className="size-4" />
+                  프로세스
+                </Button>
+              </div>
             </div>
           </Panel>
         </ReactFlow>
