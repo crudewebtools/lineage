@@ -51,6 +51,42 @@ export function collectDiscriminators(nodes: AppNode[]): Discriminator[] {
   return out
 }
 
+// ── 변형 값 색 ────────────────────────────────────────────────────────
+export type VariantColor = { badge: string; text: string }
+
+// 값별 색 팔레트. Tailwind 는 소스의 "리터럴" 클래스만 인식하므로 동적 조합
+// (`text-${c}-600`) 대신 완성된 클래스를 넉넉히 박아두고 인덱스로 골라 쓴다.
+// 값이 팔레트보다 많으면 % 로 순환한다.
+//  - badge: 필드 옆 배지(테두리+글자)   - text: 셀렉터 현재값 글자색
+const VARIANT_PALETTE: VariantColor[] = [
+  { badge: 'border-sky-500/40 text-sky-600', text: 'text-sky-600' },
+  { badge: 'border-amber-500/40 text-amber-600', text: 'text-amber-600' },
+  { badge: 'border-violet-500/40 text-violet-600', text: 'text-violet-600' },
+  { badge: 'border-emerald-500/40 text-emerald-600', text: 'text-emerald-600' },
+  { badge: 'border-rose-500/40 text-rose-600', text: 'text-rose-600' },
+  { badge: 'border-cyan-500/40 text-cyan-600', text: 'text-cyan-600' },
+  { badge: 'border-orange-500/40 text-orange-600', text: 'text-orange-600' },
+  { badge: 'border-fuchsia-500/40 text-fuchsia-600', text: 'text-fuchsia-600' },
+]
+
+// 그래프의 모든 변형 값을 (discriminator 순서 → enumValues 순서) 로 안정적으로 모아
+// 값 → 팔레트 슬롯을 매긴다. 같은 값은 어디서나 같은 색(등장 순서와 무관)이고,
+// 한 discriminator 안의 값들은 팔레트 크기 안에선 서로 다른 색이 보장된다.
+export function variantColors(
+  discriminators: Discriminator[],
+): Map<string, VariantColor> {
+  const map = new Map<string, VariantColor>()
+  let i = 0
+  for (const d of discriminators) {
+    for (const v of d.values) {
+      if (map.has(v)) continue
+      map.set(v, VARIANT_PALETTE[i % VARIANT_PALETTE.length])
+      i++
+    }
+  }
+  return map
+}
+
 // when(조건) 이 현재 활성 값 집합에 비춰 "있는가". when 이 없으면 항상 있음(공통).
 export function matchWhen(
   when: string[] | undefined,

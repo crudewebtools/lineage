@@ -57,8 +57,13 @@ function FieldRow({
   /** 조상이 접혀 있어 이 행이 화면에서 접혔는지 */
   hidden?: boolean
 }) {
-  const { onToggleCollapse, onFieldHover, highlightedFields, dimmedFields } =
-    useContext(NodeContext)
+  const {
+    onToggleCollapse,
+    onFieldHover,
+    highlightedFields,
+    dimmedFields,
+    variantColors,
+  } = useContext(NodeContext)
   const children = field.children ?? []
   const isObject = field.type === 'object'
   const collapsible = isObject && children.length > 0
@@ -136,15 +141,20 @@ function FieldRow({
           ) : (
             <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
           ))}
-        {/* 조건부 필드 — 어떤 변형 값에서만 존재하는지 배지로 표시 (왜 흐려지는지 보임) */}
-        {field.when?.length ? (
+        {/* 조건부 필드 — 어떤 변형 값에서만 존재하는지 배지로 표시 (왜 흐려지는지 보임).
+            값마다 색을 달리해 어느 변형 소속인지 한눈에 구분되게 한다. */}
+        {field.when?.map((v) => (
           <Badge
+            key={v}
             variant="outline"
-            className="h-4 shrink-0 border-sky-500/40 px-1 text-[9px] font-normal text-sky-600"
+            className={cn(
+              'h-4 shrink-0 px-1 text-[9px] font-normal',
+              variantColors.get(v)?.badge ?? 'border-sky-500/40 text-sky-600',
+            )}
           >
-            {field.when.join('·')}
+            {v}
           </Badge>
-        ) : null}
+        ))}
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
           {field.type}
           {field.array ? '[]' : ''}

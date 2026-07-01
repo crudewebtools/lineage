@@ -31,7 +31,12 @@ import { SidePanel } from './SidePanel'
 import { EdgeKindControl } from './EdgeKindControl'
 import { NodeVisibilityPanel } from './NodeVisibilityPanel'
 import { VariantControl } from './VariantControl'
-import { collectDiscriminators, computeDimmed, discKey } from './variant'
+import {
+  collectDiscriminators,
+  computeDimmed,
+  discKey,
+  variantColors,
+} from './variant'
 import { EdgeContextMenu } from './EdgeContextMenu'
 import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { rerouteCollapsedEdges } from './collapse'
@@ -217,6 +222,11 @@ export default function Flow() {
 
   // 그래프 안의 discriminator 들과, 현재 선택으로 정해지는 활성 변형 값 집합.
   const discriminators = useMemo(() => collectDiscriminators(nodes), [nodes])
+  // 변형 값 → 색 (필드 when 배지 · 셀렉터 공용). 값 순서로 안정 배정.
+  const variantColorMap = useMemo(
+    () => variantColors(discriminators),
+    [discriminators],
+  )
   const activeValues = useMemo(() => {
     const s = new Set<string>()
     for (const d of discriminators)
@@ -314,8 +324,17 @@ export default function Flow() {
       onEditProcess,
       highlightedFields: highlight?.fields ?? EMPTY_HIGHLIGHT,
       dimmedFields: dimmed.fields,
+      variantColors: variantColorMap,
     }),
-    [toggleCollapse, onFieldHover, onEditEntity, onEditProcess, highlight, dimmed],
+    [
+      toggleCollapse,
+      onFieldHover,
+      onEditEntity,
+      onEditProcess,
+      highlight,
+      dimmed,
+      variantColorMap,
+    ],
   )
 
   // 수정 모달에 넘길 초기 데이터 (생성이면 null)
@@ -393,6 +412,7 @@ export default function Flow() {
             <VariantControl
               discriminators={discriminators}
               selections={variant}
+              colors={variantColorMap}
               onChange={onSelectVariant}
             />
           </Panel>
