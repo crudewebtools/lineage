@@ -1,5 +1,5 @@
-import { useContext } from 'react'
-import { Handle, Position } from '@xyflow/react'
+import { useContext, useEffect, useMemo } from 'react'
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -67,6 +67,20 @@ export function ProcessNode({ id, data }: NodeProps<ProcessNodeType>) {
   const { onEditProcess } = useContext(NodeContext)
   const meta = KIND_META[data.kind]
   const Icon = meta.icon
+
+  // input/output 의 이름·순서가 바뀌면 핸들 Y 위치가 달라진다 → 그때만 재측정 (엣지 끝점 갱신)
+  const layoutSig = useMemo(
+    () =>
+      `${data.inputs.map((f) => f.name).join(',')}#${data.outputs
+        .map((f) => f.name)
+        .join(',')}`,
+    [data.inputs, data.outputs],
+  )
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => {
+    updateNodeInternals(id)
+  }, [id, layoutSig, updateNodeInternals])
+
   return (
     <div className="min-w-[300px] overflow-hidden rounded-lg border border-dashed border-border bg-card text-card-foreground shadow-md">
       {/* 헤더: 종류 아이콘 + 이름 + 종류 라벨 + 수정 */}

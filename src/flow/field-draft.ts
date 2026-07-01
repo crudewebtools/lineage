@@ -95,23 +95,58 @@ export function addChildTree(
   })
 }
 
-// 같은 부모 안에서 위/아래로 한 칸 이동 (형제 순서 변경)
-export function moveTree(
+// 드래그앤드롭 재배치 — activeK 를 overK 자리로 옮긴다.
+// 둘이 같은 부모(형제)일 때만 이동하고, 그렇지 않으면 그대로 둔다
+// (한 단계 아래로 재귀하며 형제 그룹을 찾는다).
+export function reorderTree(
   fields: DraftField[],
-  k: string,
-  dir: -1 | 1,
+  activeK: string,
+  overK: string,
 ): DraftField[] {
-  const i = fields.findIndex((f) => f._k === k)
-  if (i !== -1) {
-    const j = i + dir
-    if (j < 0 || j >= fields.length) return fields
+  const ai = fields.findIndex((f) => f._k === activeK)
+  const oi = fields.findIndex((f) => f._k === overK)
+  // 둘 다 이 레벨에 있으면 형제 → 재배치
+  if (ai !== -1 && oi !== -1) {
     const copy = [...fields]
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+    const [moved] = copy.splice(ai, 1)
+    copy.splice(oi, 0, moved)
     return copy
   }
+  // 한쪽만 있으면 서로 다른 부모 → 이동 금지 (변경 없음)
+  if (ai !== -1 || oi !== -1) return fields
+  // 둘 다 없으면 더 깊은 곳의 형제 그룹 탐색
   return fields.map((f) =>
-    f.children.length ? { ...f, children: moveTree(f.children, k, dir) } : f,
+    f.children.length
+      ? { ...f, children: reorderTree(f.children, activeK, overK) }
+      : f,
   )
+}
+
+// k 와 같은 그룹(형제)에 있는 _k 들의 집합 (k 자신 포함). 못 찾으면 null.
+// 드래그 시 충돌 판정을 같은 부모 안으로 제한하는 데 쓴다 — 다른 그룹의 자식이
+// 커서 아래 있어도 형제만 대상으로 잡히게.
+export function siblingKeys(
+  fields: DraftField[],
+  k: string,
+): Set<string> | null {
+  if (fields.some((f) => f._k === k)) return new Set(fields.map((f) => f._k))
+  for (const f of fields) {
+    if (f.children.length) {
+      const s = siblingKeys(f.children, k)
+      if (s) return s
+    }
+  }
+  return null
+}
+
+// _k 로 필드 하나를 찾는다 (드래그 중 오버레이에 그릴 대상). 못 찾으면 null.
+export function findTree(fields: DraftField[], k: string): DraftField | null {
+  for (const f of fields) {
+    if (f._k === k) return f
+    const hit = f.children.length ? findTree(f.children, k) : null
+    if (hit) return hit
+  }
+  return null
 }
 
 // 형제 그룹마다 이름이 비었거나 중복인지 검사 (경로는 부모별로 독립)

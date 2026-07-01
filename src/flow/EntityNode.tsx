@@ -30,6 +30,15 @@ const hiddenHandleStyle = {
   pointerEvents: 'none' as const,
 }
 
+// 핸들 레이아웃에 영향을 주는 것(필드 이름·순서·중첩)만 추린 시그니처.
+function fieldLayoutSig(fields: Field[]): string {
+  return fields
+    .map((f) =>
+      f.children?.length ? `${f.name}(${fieldLayoutSig(f.children)})` : f.name,
+    )
+    .join(',')
+}
+
 function FieldRow({
   field,
   depth,
@@ -175,11 +184,16 @@ export function EntityNode({ id, data }: NodeProps<EntityNodeType>) {
   const Icon = meta.icon
   const collapsed = useMemo(() => new Set(data.collapsed ?? []), [data.collapsed])
 
-  // 접기/펴기로 핸들 위치가 바뀌면 React Flow 에 재측정을 알려 엣지 끝점을 갱신
+  // 필드 순서·구조나 접힘이 바뀌면 핸들 Y 위치가 달라진다 → 문자열 시그니처로 압축해
+  // (배열을 deps 에 직접 넣지 않고) 정확히 그때만 React Flow 에 재측정을 알린다.
+  const layoutSig = useMemo(
+    () => `${fieldLayoutSig(data.fields)}#${(data.collapsed ?? []).join('|')}`,
+    [data.fields, data.collapsed],
+  )
   const updateNodeInternals = useUpdateNodeInternals()
   useEffect(() => {
     updateNodeInternals(id)
-  }, [id, data.collapsed, updateNodeInternals])
+  }, [id, layoutSig, updateNodeInternals])
 
   return (
     <div className="min-w-[220px] overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-md">
