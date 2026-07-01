@@ -352,7 +352,16 @@ export default function Flow() {
           zIndex: 1000,
         }
       if (dimmed.edges.has(e.id))
-        return { ...e, style: { ...e.style, opacity: 0.12 }, zIndex: 0 }
+        // 변형에 없는 엣지는 흐리게 + 라벨은 아예 숨기고, 클릭도 막는다
+        // (흐린 엣지의 메뉴가 열리면 헷갈린다 — pointerEvents 차단 + 클릭 히트박스 제거).
+        return {
+          ...e,
+          label: undefined,
+          selectable: false,
+          interactionWidth: 0,
+          style: { ...e.style, opacity: 0.12, pointerEvents: 'none' as const },
+          zIndex: 0,
+        }
       return e
     })
   }, [edges, nodes, highlight, dimmed])
