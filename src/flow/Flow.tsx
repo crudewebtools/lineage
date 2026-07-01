@@ -217,7 +217,13 @@ export default function Flow() {
         ? hoverSeeds(hovered, node.data.fields, node.data.collapsed ?? [])
         : [hovered]
     if (!seeds) return null
-    return computeHighlight(seeds, edges)
+    // 숨긴 노드의 엣지는 화면에서 사라지므로 계보 전파에서도 빼야 한다
+    // (숨긴 A 를 거쳐 B.a → B.b 로 강조가 새어 나가지 않게).
+    const hiddenIds = new Set(nodes.filter((n) => n.hidden).map((n) => n.id))
+    const visibleEdges = edges.filter(
+      (e) => !hiddenIds.has(e.source) && !hiddenIds.has(e.target),
+    )
+    return computeHighlight(seeds, visibleEdges)
   }, [hovered, nodes, edges])
 
   // 그래프 안의 discriminator 들과, 현재 선택으로 정해지는 활성 변형 값 집합.
