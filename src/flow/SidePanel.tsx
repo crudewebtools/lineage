@@ -1,7 +1,9 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import {
+  Check,
   ChevronLeft,
   Code2,
+  Link2,
   PanelRightClose,
   PanelRightOpen,
   type LucideIcon,
@@ -9,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CodeEditor } from './CodeEditor'
+import { buildShareUrl } from './share'
 import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
 
@@ -44,6 +47,18 @@ export function SidePanel({
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [view, setView] = useState<View>('menu')
+  const [copied, setCopied] = useState(false)
+
+  // 현재 그래프를 ?g=... 쿼리가 담긴 풀 URL 로 만들어 클립보드에 복사한다.
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(buildShareUrl(nodes, edges))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      console.warn('[lineage] 클립보드 복사에 실패했습니다.')
+    }
+  }
 
   if (collapsed) {
     return (
@@ -84,6 +99,19 @@ export function SidePanel({
           variant="ghost"
           size="icon"
           className="ml-auto size-7"
+          title={copied ? '복사됨!' : '공유 링크 복사 (?g=... 포함 URL)'}
+          onClick={copyLink}
+        >
+          {copied ? (
+            <Check className="size-4 text-emerald-500" />
+          ) : (
+            <Link2 className="size-4" />
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
           title="패널 접기"
           onClick={() => setCollapsed(true)}
         >

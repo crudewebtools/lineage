@@ -2,18 +2,18 @@ import {
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
 } from 'lz-string'
-import { FIELD_TYPES, KINDS, graphFromDoc } from './code'
+import { FIELD_TYPES, KINDS, graphFromDoc, graphToDoc } from './code'
 import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
 import type { EntityKind, Field, FieldMapping } from './types'
 
-// 그래프(테이블 + 엣지) 구조를 URL 해시에 싣는다.
+// 그래프(테이블 + 엣지) 구조를 공유 링크로 싣는다 — "링크 복사" 시에만 URL 쿼리(?g=...)에.
 // 압축(lz-string) 전에 "키 없는 튜플 배열"로 패킹해 페이로드를 줄인다 →
 // 반복되던 "id"/"sourceField"/"type" 같은 키와 따옴표·중괄호가 사라져 URL 이 짧아진다.
-const HASH_PREFIX = '#g='
-// 패킹 포맷 버전. v2 에서 processes 추가, v3 에서 변형(discriminator/enumValues/when)
-// 추가. 언패킹은 구버전(v1·v2)도 그대로 지원한다(새 항목은 모두 끝쪽 선택 슬롯).
-const PACK_VERSION = 3
+const SHARE_PARAM = 'g'
+// 패킹 포맷: [version, entities, processes, mappings]. field·mapping 의 선택 항목은
+// 튜플 끝쪽 슬롯으로 담고 비면 잘라낸다(trimTail).
+const PACK_VERSION = 1
 
 // 필드 플래그 비트마스크 (array/nullable/pk/discriminator 를 정수 하나로)
 const F_ARRAY = 1
@@ -114,12 +114,10 @@ function unpackField(t: unknown): unknown {
 
 function unpackDoc(arr: unknown): unknown {
   if (!Array.isArray(arr)) return null
-  const version = arr[0]
-  // v1: [v, entities, mappings] / v2: [v, entities, processes, mappings]
+  // [version, entities, processes, mappings]
   const entities = Array.isArray(arr[1]) ? arr[1] : []
-  const processes = version !== 1 && Array.isArray(arr[2]) ? arr[2] : []
-  const mappingsArr = version === 1 ? arr[2] : arr[3]
-  const mappings = Array.isArray(mappingsArr) ? mappingsArr : []
+  const processes = Array.isArray(arr[2]) ? arr[2] : []
+  const mappings = Array.isArray(arr[3]) ? arr[3] : []
   return {
     entities: entities.map((e: unknown) => {
       const a = Array.isArray(e) ? e : []
@@ -157,23 +155,25 @@ function unpackDoc(arr: unknown): unknown {
   }
 }
 
-// ── URL 해시 ↔ 그래프 ─────────────────────────────────────────────────
-// 위치 없는 keyed JSON(docJson)을 패킹·압축해 해시 문자열로 만든다.
-export function encodeGraphDoc(docJson: string): string {
-  const doc = JSON.parse(docJson) as PackDoc
-  return HASH_PREFIX + compressToEncodedURIComponent(JSON.stringify(packDoc(doc)))
+// ── URL 쿼리 ↔ 그래프 ─────────────────────────────────────────────────
+// 현재 그래프(위치·접힘 제외)를 패킹·압축해 ?g=... 를 포함한 풀 URL 로 만든다.
+// "링크 복사" 버튼에서만 호출한다 — 평소 편집 중에는 주소가 깨끗하게 유지된다.
+export function buildShareUrl(nodes: AppNode[], edges: MappingEdge[]): string {
+  const packed = JSON.stringify(packDoc(graphToDoc(nodes, edges) as PackDoc))
+  const url = new URL(window.location.href)
+  url.hash = ''
+  url.searchParams.set(SHARE_PARAM, compressToEncodedURIComponent(packed))
+  return url.toString()
 }
 
-// 현재 URL 해시에서 그래프를 복원한다. 해시가 없거나 깨졌으면 null.
-export function readGraphFromHash(): {
+// URL 쿼리(?g=...)에 그래프가 있으면 복원한다. 없거나 깨졌으면 null.
+export function readGraphFromUrl(): {
   nodes: AppNode[]
   edges: MappingEdge[]
 } | null {
-  const hash = window.location.hash
-  if (!hash.startsWith(HASH_PREFIX)) return null
-  const packedJson = decompressFromEncodedURIComponent(
-    hash.slice(HASH_PREFIX.length),
-  )
+  const value = new URLSearchParams(window.location.search).get(SHARE_PARAM)
+  if (!value) return null
+  const packedJson = decompressFromEncodedURIComponent(value)
   if (!packedJson) {
     console.warn('[lineage] URL 그래프 데이터를 해제하지 못했습니다.')
     return null
@@ -191,4 +191,12 @@ export function readGraphFromHash(): {
     return null
   }
   return { nodes: res.nodes, edges: res.edges }
+}
+
+// 반영한 뒤 공유 쿼리를 주소에서 제거한다 (한 번 로드하면 주소는 깨끗하게).
+export function clearShareParam(): void {
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has(SHARE_PARAM)) return
+  url.searchParams.delete(SHARE_PARAM)
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash)
 }

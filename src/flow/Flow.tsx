@@ -35,8 +35,7 @@ import { collectDiscriminators, computeDimmed, discKey } from './variant'
 import { EdgeContextMenu } from './EdgeContextMenu'
 import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { rerouteCollapsedEdges } from './collapse'
-import { graphToDoc } from './code'
-import { encodeGraphDoc, readGraphFromHash } from './share'
+import { readGraphFromUrl, clearShareParam } from './share'
 import { initialNodes, initialEdges } from './sample-data'
 import type { AppNode } from './node-types'
 import type { EntityData, MappingKind, ProcessData } from './types'
@@ -52,11 +51,13 @@ export default function Flow() {
   )
 
   const paneRef = useRef<HTMLDivElement>(null)
-  // 초기 그래프: URL 해시(#g=...)가 있으면 그것으로, 없으면 샘플 데이터
+  // 초기 그래프: 공유 링크(?g=...)가 있으면 그것으로, 없으면 샘플 데이터.
   const initial = useMemo(
-    () => readGraphFromHash() ?? { nodes: initialNodes, edges: initialEdges },
+    () => readGraphFromUrl() ?? { nodes: initialNodes, edges: initialEdges },
     [],
   )
+  // 반영했으면 주소에서 공유 쿼리를 지운다 — 이후 편집으로는 URL 이 바뀌지 않는다.
+  useEffect(() => clearShareParam(), [])
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(
     initial.nodes,
   )
@@ -355,20 +356,6 @@ export default function Flow() {
       return e
     })
   }, [edges, nodes, highlight, dimmed])
-
-  // 그래프(테이블·엣지) 구조를 URL 해시에 동기화한다.
-  // graphToDoc 은 위치·접힘을 빼므로, 드래그·접기로는 docJson 이 안 바뀌어
-  // 해시가 갱신되지 않는다(구조가 바뀔 때만 갱신).
-  const docJson = useMemo(
-    () => JSON.stringify(graphToDoc(nodes, edges)),
-    [nodes, edges],
-  )
-  useEffect(() => {
-    const hash = encodeGraphDoc(docJson)
-    if (hash !== window.location.hash) {
-      window.history.replaceState(null, '', hash)
-    }
-  }, [docJson])
 
   return (
     <NodeContext.Provider value={nodeCtx}>
