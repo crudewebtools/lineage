@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -23,11 +24,13 @@ export function ProcessDialog({
   isNew,
   initial,
   onSave,
+  onDelete,
   onClose,
 }: {
   isNew: boolean
   initial: ProcessData | null
   onSave: (data: ProcessData) => void
+  onDelete?: () => void
   onClose: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
@@ -35,6 +38,8 @@ export function ProcessDialog({
   const [inputs, setInputs] = useState(() => toDraft(initial?.inputs ?? []))
   const [outputs, setOutputs] = useState(() => toDraft(initial?.outputs ?? []))
   const [error, setError] = useState<string | null>(null)
+  // 삭제 버튼 2단계 확인 — 한 번 누르면 "정말 삭제" 로 바뀌고, 다시 누르면 삭제
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const handleSave = () => {
     const nm = name.trim()
@@ -107,6 +112,20 @@ export function ProcessDialog({
         {error && <p className="text-xs text-destructive">{error}</p>}
 
         <DialogFooter>
+          {onDelete && (
+            <Button
+              variant={confirmDelete ? 'destructive' : 'outline'}
+              size="sm"
+              className={cn(
+                'sm:mr-auto',
+                !confirmDelete && 'text-destructive hover:text-destructive',
+              )}
+              onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
+            >
+              <Trash2 />
+              {confirmDelete ? '정말 삭제 (연결 엣지 포함)' : '삭제'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={onClose}>
             취소
           </Button>

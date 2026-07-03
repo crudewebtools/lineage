@@ -290,6 +290,17 @@ export default function Flow({
     [entityDialog, setNodes],
   )
 
+  // 노드 삭제 — 걸린 엣지도 함께 제거하고 열린 모달을 닫는다.
+  const deleteNode = useCallback(
+    (id: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== id))
+      setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id))
+      setEntityDialog(null)
+      setProcessDialog(null)
+    },
+    [setNodes, setEdges],
+  )
+
   // 프로세스 수정 모달 열기 (ProcessNode 헤더 ✏️)
   const onEditProcess = useCallback(
     (id: string) => setProcessDialog({ mode: 'edit', id }),
@@ -482,6 +493,11 @@ export default function Flow({
           isNew={entityDialog.mode === 'new'}
           initial={entityInitial}
           onSave={saveEntity}
+          onDelete={
+            entityDialog.mode === 'edit'
+              ? () => deleteNode(entityDialog.id)
+              : undefined
+          }
           onClose={() => setEntityDialog(null)}
         />
       )}
@@ -492,6 +508,11 @@ export default function Flow({
           isNew={processDialog.mode === 'new'}
           initial={processInitial}
           onSave={saveProcess}
+          onDelete={
+            processDialog.mode === 'edit'
+              ? () => deleteNode(processDialog.id)
+              : undefined
+          }
           onClose={() => setProcessDialog(null)}
         />
       )}
