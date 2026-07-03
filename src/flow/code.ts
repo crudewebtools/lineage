@@ -27,7 +27,7 @@ type CodeProcess = {
   inputs: Field[]
   outputs: Field[]
 }
-type CodeDoc = {
+export type CodeDoc = {
   entities: CodeEntity[]
   processes?: CodeProcess[]
   mappings: FieldMapping[]

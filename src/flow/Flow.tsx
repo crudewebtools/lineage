@@ -40,8 +40,6 @@ import {
 import { EdgeContextMenu } from './EdgeContextMenu'
 import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { rerouteCollapsedEdges } from './collapse'
-import { readGraphFromUrl, clearShareParam } from './share'
-import { initialNodes, initialEdges } from './sample-data'
 import type { AppNode } from './node-types'
 import type { EntityData, MappingKind, ProcessData } from './types'
 
@@ -49,26 +47,29 @@ import type { EntityData, MappingKind, ProcessData } from './types'
 const MENU_W = 208
 const MENU_H = 220
 
-export default function Flow() {
+// 한 페이지의 그래프를 그린다. 페이지 전환은 부모(App)가 key={pageId} 리마운트로
+// 처리한다 — 호버·변형 선택·메뉴 같은 페이지 종속 상태가 자연스럽게 초기화된다.
+export default function Flow({
+  initialNodes,
+  initialEdges,
+  onGraphChange,
+}: {
+  initialNodes: AppNode[]
+  initialEdges: MappingEdge[]
+  onGraphChange: (nodes: AppNode[], edges: MappingEdge[]) => void
+}) {
   const nodeTypes = useMemo(
     () => ({ entity: EntityNode, process: ProcessNode }),
     [],
   )
 
   const paneRef = useRef<HTMLDivElement>(null)
-  // 초기 그래프: 공유 링크(?g=...)가 있으면 그것으로, 없으면 샘플 데이터.
-  const initial = useMemo(
-    () => readGraphFromUrl() ?? { nodes: initialNodes, edges: initialEdges },
-    [],
-  )
-  // 반영했으면 주소에서 공유 쿼리를 지운다 — 이후 편집으로는 URL 이 바뀌지 않는다.
-  useEffect(() => clearShareParam(), [])
-  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(
-    initial.nodes,
-  )
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState<MappingEdge>(
-    initial.edges,
+    initialEdges,
   )
+  // 그래프가 바뀔 때마다 부모에 알린다 — 부모가 디바운스 자동저장을 담당.
+  useEffect(() => onGraphChange(nodes, edges), [nodes, edges, onGraphChange])
   const [newEdgeKind, setNewEdgeKind] = useState<MappingKind>('keep')
   // 클릭한 엣지의 컨텍스트 메뉴 위치(컨테이너 기준 좌표)
   const [menu, setMenu] = useState<{ edgeId: string; x: number; y: number } | null>(
@@ -393,7 +394,7 @@ export default function Flow() {
 
   return (
     <NodeContext.Provider value={nodeCtx}>
-    <div className="flex h-full w-full">
+    <div className="flex h-full min-w-0 flex-1">
       <div ref={paneRef} className="relative h-full flex-1">
         <ReactFlow
           nodes={nodes}
