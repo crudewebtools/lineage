@@ -5,7 +5,7 @@ import {
 import { FIELD_TYPES, KINDS, graphFromDoc, graphToDoc } from './code'
 import type { AppNode } from './node-types'
 import type { MappingEdge } from './edge-kind'
-import type { EntityKind, Field, FieldMapping } from './types'
+import type { EntityKind, Field, FieldMapping, When } from './types'
 
 // 그래프(테이블 + 엣지) 구조를 공유 링크로 싣는다 — "링크 복사" 시에만 URL 쿼리(?g=...)에.
 // 압축(lz-string) 전에 "키 없는 튜플 배열"로 패킹해 페이로드를 줄인다 →
@@ -40,14 +40,28 @@ type PackDoc = {
 // entity → [id, name, kindIdx, fields]
 // process→ [id, name, kindIdx, inputs, outputs]
 // mapping→ [id, source, sourceField, target, targetField, kindIdx?, label?, when?]
+// when   → [[disc, ...values], ...]  (절마다 튜플 하나 — 첫 칸이 disc 키)
 // doc    → [version, entities, processes, mappings]
 //
 // 끝쪽 선택 슬롯(children/enumValues/when, label/when)은 "비면 뒤에서부터 잘라낸다".
-// → 대부분의 필드·매핑은 기존(v2)과 동일한 길이로 패킹돼 URL 이 짧게 유지된다.
+// → 선택 항목이 없는 대부분의 필드·매핑은 짧은 튜플로 패킹돼 URL 이 짧게 유지된다.
 function trimTail(slots: unknown[]): unknown[] {
   const t = [...slots]
   while (t.length && !t[t.length - 1]) t.pop()
   return t
+}
+
+// when 절 배열 ↔ 튜플. 언패킹은 신뢰할 수 없는 입력 — 형태가 어긋나면
+// 그대로 두고 graphFromDoc 검증에서 걸러지게 한다.
+function packWhen(when: When): unknown[] {
+  return when.map((c) => [c.disc, ...c.values])
+}
+
+function unpackWhen(v: unknown): unknown {
+  if (!Array.isArray(v)) return v
+  return v.map((c) =>
+    Array.isArray(c) ? { disc: c[0], values: c.slice(1) } : c,
+  )
 }
 
 function packField(f: Field): unknown[] {
@@ -60,7 +74,7 @@ function packField(f: Field): unknown[] {
   const tail = trimTail([
     f.children?.length ? f.children.map(packField) : 0,
     f.enumValues?.length ? f.enumValues : 0,
-    f.when?.length ? f.when : 0,
+    f.when?.length ? packWhen(f.when) : 0,
   ])
   t.push(...tail)
   return t
@@ -84,7 +98,11 @@ function packDoc(doc: PackDoc): unknown[] {
     const t: unknown[] = [m.id, m.source, m.sourceField, m.target, m.targetField]
     const kindIdx = m.kind === 'transform' ? 1 : 0
     // kind/label/when 은 끝쪽 선택 항목 — 뒤쪽 빈 칸을 잘라 위치 기반으로 담는다.
-    const tail = trimTail([kindIdx, m.label ?? 0, m.when?.length ? m.when : 0])
+    const tail = trimTail([
+      kindIdx,
+      m.label ?? 0,
+      m.when?.length ? packWhen(m.when) : 0,
+    ])
     t.push(...tail)
     return t
   })
@@ -108,7 +126,7 @@ function unpackField(t: unknown): unknown {
   if (fl & F_DISCRIMINATOR) f.discriminator = true
   if (Array.isArray(children)) f.children = children.map(unpackField)
   if (Array.isArray(enumValues)) f.enumValues = enumValues
-  if (Array.isArray(when)) f.when = when
+  if (Array.isArray(when)) f.when = unpackWhen(when)
   return f
 }
 
@@ -149,7 +167,7 @@ function unpackDoc(arr: unknown): unknown {
       }
       if (a[5] === 1) obj.kind = 'transform'
       if (typeof a[6] === 'string' && a[6]) obj.label = a[6]
-      if (Array.isArray(a[7])) obj.when = a[7]
+      if (Array.isArray(a[7])) obj.when = unpackWhen(a[7])
       return obj
     }),
   }
@@ -185,7 +203,8 @@ export function readGraphFromUrl(): {
     console.warn('[lineage] URL 그래프 데이터가 손상되었습니다.')
     return null
   }
-  const res = graphFromDoc(unpackDoc(packed))
+  // 공유 시점 이후 그래프가 바뀌었을 수 있으므로 lenient — dangling when 절은 제거
+  const res = graphFromDoc(unpackDoc(packed), 'lenient')
   if (!res.ok) {
     console.warn('[lineage] URL 그래프가 유효하지 않습니다:', res.errors)
     return null

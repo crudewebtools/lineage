@@ -1,4 +1,4 @@
-import type { Field, FieldType } from './types'
+import type { Field, FieldType, When } from './types'
 
 // ── 모달용 필드 초안 (재귀 트리) ──────────────────────────────────────
 // 폼에서 직접 편집하는 값은 펼쳐 두고(name/type/플래그/children),
@@ -13,7 +13,7 @@ export type DraftField = {
   children: DraftField[]
   discriminator?: boolean
   enumValues?: string[]
-  when?: string[]
+  when?: When
 }
 
 // 행 식별용 키 — 값과 무관한 단조 증가 카운터(모달 인스턴스 간 공유돼도 무방).
@@ -149,10 +149,13 @@ export function findTree(fields: DraftField[], k: string): DraftField | null {
   return null
 }
 
-// 형제 그룹마다 이름이 비었거나 중복인지 검사 (경로는 부모별로 독립)
+// 형제 그룹마다 이름이 비었거나 중복·금지 문자인지 검사 (경로는 부모별로 독립)
 export function validate(fields: DraftField[], where: string): string | null {
   const names = fields.map((f) => f.name.trim())
   if (names.some((n) => !n)) return `${where}: 필드명을 모두 입력하세요`
+  // '.' 은 경로 구분자, ':' 는 변형(when.disc) 키 구분자와 충돌한다
+  if (names.some((n) => /[.:]/.test(n)))
+    return `${where}: 필드명에 '.' 과 ':' 는 쓸 수 없습니다`
   if (new Set(names).size !== names.length)
     return `${where}: 필드명이 중복됩니다`
   for (const f of fields) {
@@ -162,6 +165,65 @@ export function validate(fields: DraftField[], where: string): string | null {
     }
   }
   return null
+}
+
+// ── 필드 개명 추적 ────────────────────────────────────────────────────
+// 모달의 draft 행은 _k(안정 키)를 가지므로, 열 때/저장할 때의 경로를 비교하면
+// "어떤 경로가 어떤 경로로 바뀌었는지"를 알 수 있다. 부모 object 개명으로
+// 자식 경로가 바뀌는 경우도 전체 경로 비교라 자연히 포함된다.
+// 이 매핑은 저장 시 when.disc·엣지 핸들·접힘 상태 갱신에 쓴다.
+
+// _k → 전체 경로 (이름은 저장 시와 동일하게 trim 해 비교)
+export function collectPaths(
+  fields: DraftField[],
+  prefix = '',
+): Map<string, string> {
+  const out = new Map<string, string>()
+  const walk = (list: DraftField[], pre: string) => {
+    for (const f of list) {
+      const name = f.name.trim()
+      const path = pre ? `${pre}.${name}` : name
+      out.set(f._k, path)
+      if (f.children.length) walk(f.children, path)
+    }
+  }
+  walk(fields, prefix)
+  return out
+}
+
+// 저장 시점의 "연결 가능한(리프)" 경로 집합 — object 는 컨테이너라 제외.
+// 저장 후 엣지 정리에 쓴다: 개명을 반영한 핸들 경로가 이 집합에 없으면
+// (필드 삭제 또는 object 전환) 그 엣지는 더는 유효하지 않다.
+// toField 와 같은 규칙으로 object 일 때만 children 으로 내려간다.
+export function collectLeafPaths(
+  fields: DraftField[],
+  prefix = '',
+): Set<string> {
+  const out = new Set<string>()
+  const walk = (list: DraftField[], pre: string) => {
+    for (const f of list) {
+      const name = f.name.trim()
+      const path = pre ? `${pre}.${name}` : name
+      if (f.type !== 'object') out.add(path)
+      else if (f.children.length) walk(f.children, path)
+    }
+  }
+  walk(fields, prefix)
+  return out
+}
+
+// 열 때(before)와 저장할 때(after)의 경로를 _k 로 이어붙여 옛 경로 → 새 경로.
+// 삭제된 필드(after 에 없음)는 개명이 아니므로 담지 않는다.
+export function buildRenames(
+  before: ReadonlyMap<string, string>,
+  after: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const [k, oldPath] of before) {
+    const newPath = after.get(k)
+    if (newPath !== undefined && newPath !== oldPath) out.set(oldPath, newPath)
+  }
+  return out
 }
 
 // 변형 설정을 가진 필드가 하나라도 있는지 (보존 안내 표시용)

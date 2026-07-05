@@ -10,6 +10,18 @@ export type FieldType =
   | 'object'
   | 'json'
 
+// ── 입력 변형 조건 ────────────────────────────────────────────────────
+// when 절 하나 — disc 가 가리키는 discriminator 의 현재 선택 값이 values 중
+// 하나일 때 성립한다(values 안은 OR). disc 는 "노드id::필드경로" (variant.ts 의
+// discKey 와 같은 형식). 예: { disc: 'orderEvent::status', values: ['CANCELED'] }
+export type WhenClause = {
+  disc: string
+  values: string[]
+}
+// 절 배열 — 절 사이는 AND. 예: "status=CANCELED 이면서 channel=APP 일 때만".
+// 빈 배열/없음 = 모든 변형에 공통으로 존재.
+export type When = WhenClause[]
+
 export type Field = {
   name: string
   type: FieldType
@@ -29,10 +41,10 @@ export type Field = {
   /** discriminator 일 때 고를 수 있는 값들 (예: ['NORMAL', 'CANCELED']) */
   enumValues?: string[]
   /**
-   * 조건부 존재 — 활성 변형 값이 이 목록 중 하나일 때만 "있는" 필드.
-   * 비우면(없으면) 모든 변형에 공통으로 존재한다. object 에 달면 하위까지 함께 사라진다.
+   * 조건부 존재 — 모든 when 절이 성립할 때만(AND) "있는" 필드.
+   * 없으면 모든 변형에 공통으로 존재한다. object 에 달면 하위까지 함께 사라진다.
    */
-  when?: string[]
+  when?: When
 }
 
 export type EntityKind = 'event' | 'api' | 'db' | 'etc'
@@ -72,8 +84,8 @@ export type FieldMapping = {
   /** 변환 메모 등 (선택) */
   label?: string
   /**
-   * 조건부 매핑 — 활성 변형 값이 이 목록 중 하나일 때만 "있는" 엣지.
-   * 비우면 항상 존재. (양 끝 필드가 변형으로 사라지면 엣지도 자동으로 흐려진다)
+   * 조건부 매핑 — 모든 when 절이 성립할 때만(AND) "있는" 엣지.
+   * 없으면 항상 존재. (양 끝 필드가 변형으로 사라지면 엣지도 자동으로 흐려진다)
    */
-  when?: string[]
+  when?: When
 }

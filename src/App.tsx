@@ -16,13 +16,15 @@ const STORAGE_NOTICE = {
 function App() {
   const pages = usePages()
 
-  // 현재 페이지의 저장본(doc) → 그래프. 저장할 때와 같은 검증(graphFromDoc)을 거친다.
+  // 현재 페이지의 저장본(doc) → 그래프. lenient 모드로 검증한다 — 앱 조작(필드
+  // 이름 변경·노드 삭제)으로 생긴 dangling when 참조는 제거하고 통과시켜,
+  // 정상 편집으로 만든 페이지가 검증 실패로 잠기지 않게 한다.
   // 검증 실패 시 Flow 를 마운트하지 않고 안내 화면을 띄운다 — 빈 그래프로 열면
   // 마운트 직후 자동저장이 원본을 덮어쓰므로, 원본 보존을 위해 반드시 분기해야 한다.
   const doc = pages.current?.doc
   const graph = useMemo(() => {
     if (!doc) return null
-    const res = graphFromDoc(doc)
+    const res = graphFromDoc(doc, 'lenient')
     return res.ok
       ? ({ ok: true, nodes: res.nodes, edges: res.edges } as const)
       : ({ ok: false, errors: res.errors, doc } as const)

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { NodeContext } from './node-context'
 import { fieldKey } from './highlight'
+import { valueKey } from './variant'
 import { KIND_META } from './entity-kind'
 import type { EntityNodeType } from './node-types'
 import type { Field } from './types'
@@ -142,18 +143,31 @@ function FieldRow({
             <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
           ))}
         {/* 조건부 필드 — 어떤 변형 값에서만 존재하는지 배지로 표시 (왜 흐려지는지 보임).
-            값마다 색을 달리해 어느 변형 소속인지 한눈에 구분되게 한다. */}
-        {field.when?.map((v) => (
-          <Badge
-            key={v}
-            variant="outline"
-            className={cn(
-              'h-4 shrink-0 px-1 text-[9px] font-normal',
-              variantColors.get(v)?.badge ?? 'border-sky-500/40 text-sky-600',
-            )}
+            (discriminator, 값)마다 색을 달리해 소속을 구분하고, 절 사이(AND)는 & 로 잇는다. */}
+        {field.when?.map((clause, ci) => (
+          // key 에 인덱스를 섞는다 — 검증기는 중복 disc 절/중복 값도 허용하므로
+          // disc·값만으로는 key 가 겹칠 수 있다 (목록이 정적이라 인덱스로 충분)
+          <span
+            key={`${clause.disc}::${ci}`}
+            className="flex shrink-0 items-center gap-0.5"
           >
-            {v}
-          </Badge>
+            {ci > 0 && (
+              <span className="text-[9px] text-muted-foreground">&amp;</span>
+            )}
+            {clause.values.map((v, vi) => (
+              <Badge
+                key={`${v}::${vi}`}
+                variant="outline"
+                className={cn(
+                  'h-4 shrink-0 px-1 text-[9px] font-normal',
+                  variantColors.get(valueKey(clause.disc, v))?.badge ??
+                    'border-sky-500/40 text-sky-600',
+                )}
+              >
+                {v}
+              </Badge>
+            ))}
+          </span>
         ))}
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
           {field.type}

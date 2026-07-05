@@ -14,8 +14,25 @@ import { cn } from '@/lib/utils'
 import { KIND_META } from './entity-kind'
 import { KINDS } from './code'
 import { FieldTreeEditor } from './FieldTreeEditor'
-import { anyVariant, toDraft, toField, validate } from './field-draft'
+import {
+  anyVariant,
+  buildRenames,
+  collectLeafPaths,
+  collectPaths,
+  toDraft,
+  toField,
+  validate,
+} from './field-draft'
 import type { EntityData, EntityKind } from './types'
+
+// 저장 시 필드 편집 결과 요약 — 부모(Flow)가 참조 갱신·엣지 정리에 쓴다.
+//  - renames  : 바뀐 필드 경로(옛 → 새). when.disc·엣지 핸들·접힘 상태 갱신용.
+//  - leafPaths: 저장 후 연결 가능한(리프) 경로 전체. 개명을 반영해도 여기 없는
+//               핸들의 엣지는 삭제·object 전환으로 무효 → 제거 대상.
+export type FieldChanges = {
+  renames: ReadonlyMap<string, string>
+  leafPaths: ReadonlySet<string>
+}
 
 export function EntityDialog({
   isNew,
@@ -26,13 +43,15 @@ export function EntityDialog({
 }: {
   isNew: boolean
   initial: EntityData | null
-  onSave: (data: EntityData) => void
+  onSave: (data: EntityData, changes: FieldChanges) => void
   onDelete?: () => void
   onClose: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [kind, setKind] = useState<EntityKind>(initial?.kind ?? 'etc')
   const [fields, setFields] = useState(() => toDraft(initial?.fields ?? []))
+  // 열었을 때의 _k → 경로. 저장 시점 경로와 비교해 개명을 알아낸다.
+  const [origPaths] = useState(() => collectPaths(fields))
   const [error, setError] = useState<string | null>(null)
   // 삭제 버튼 2단계 확인 — 한 번 누르면 "정말 삭제" 로 바뀌고, 다시 누르면 삭제
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -42,7 +61,13 @@ export function EntityDialog({
     if (!nm) return setError('엔터티 이름을 입력하세요')
     const e = validate(fields, '최상위')
     if (e) return setError(e)
-    onSave({ name: nm, kind, fields: fields.map(toField) })
+    onSave(
+      { name: nm, kind, fields: fields.map(toField) },
+      {
+        renames: buildRenames(origPaths, collectPaths(fields)),
+        leafPaths: collectLeafPaths(fields),
+      },
+    )
   }
 
   return (
@@ -91,7 +116,8 @@ export function EntityDialog({
         {anyVariant(fields) && (
           <p className="text-[10px] leading-relaxed text-muted-foreground">
             <GitBranch className="mr-1 inline size-3 text-sky-500" />
-            변형(discriminator·when) 설정이 있는 필드는 그대로 보존됩니다. 변경은
+            변형(discriminator·when) 설정이 있는 필드는 그대로 보존되고, 필드
+            이름을 바꾸면 이를 참조하는 when 조건도 함께 갱신됩니다. 설정 변경은
             오른쪽 코드 패널(JSON)에서.
           </p>
         )}

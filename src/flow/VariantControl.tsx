@@ -1,6 +1,11 @@
 import { GitBranch } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { discKey, type Discriminator, type VariantColor } from './variant'
+import {
+  discKey,
+  valueKey,
+  type Discriminator,
+  type VariantColor,
+} from './variant'
 
 // 좌상단 변형 셀렉터 — discriminator 마다 드롭다운 하나.
 // 값을 바꾸면 그 변형에 없는 필드·엣지가 캔버스에서 흐려진다.
@@ -37,7 +42,7 @@ export function VariantControl({
               className={cn(
                 'ml-auto rounded border border-border bg-background px-1.5 py-0.5 font-medium focus:outline-none focus:ring-1 focus:ring-ring',
                 // 현재 값의 색으로 물들여 필드 배지와 눈으로 연결되게 한다
-                colors.get(value)?.text ?? 'text-foreground',
+                colors.get(valueKey(key, value))?.text ?? 'text-foreground',
               )}
             >
               {d.values.map((v) => (

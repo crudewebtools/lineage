@@ -24,6 +24,13 @@ export const initialNodes: AppNode[] = [
           discriminator: true,
           enumValues: ['NORMAL', 'CANCELED'],
         },
+        // 두 번째 분기 기준 — when 절을 AND 로 조합할 수 있다 (아래 pushToken 참고)
+        {
+          name: 'channel',
+          type: 'string',
+          discriminator: true,
+          enumValues: ['APP', 'WEB'],
+        },
         {
           name: 'items',
           type: 'object',
@@ -37,15 +44,29 @@ export const initialNodes: AppNode[] = [
           ],
         },
         // NORMAL 일 때만 결제 정보가 함께 온다
-        { name: 'paymentId', type: 'string', when: ['NORMAL'] },
+        {
+          name: 'paymentId',
+          type: 'string',
+          when: [{ disc: 'orderEvent::status', values: ['NORMAL'] }],
+        },
         // CANCELED 일 때만 취소 정보(object 통째)가 함께 온다
         {
           name: 'cancellation',
           type: 'object',
-          when: ['CANCELED'],
+          when: [{ disc: 'orderEvent::status', values: ['CANCELED'] }],
           children: [
             { name: 'reason', type: 'string' },
             { name: 'refunded', type: 'boolean' },
+          ],
+        },
+        // AND 조합 — 취소이면서(status=CANCELED) 앱 채널(channel=APP)일 때만
+        // 취소 푸시 알림 토큰이 함께 온다
+        {
+          name: 'pushToken',
+          type: 'string',
+          when: [
+            { disc: 'orderEvent::status', values: ['CANCELED'] },
+            { disc: 'orderEvent::channel', values: ['APP'] },
           ],
         },
         { name: 'occurredAt', type: 'timestamp' },
@@ -173,7 +194,7 @@ export const mappings: FieldMapping[] = [
   { id: 'm8', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
   { id: 'm9', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
   // 조건부 매핑 — NORMAL 일 때만 결제 정보가 흘러간다 (CANCELED 면 양 끝이 흐려짐)
-  { id: 'm10', source: 'orderEvent', sourceField: 'paymentId', target: 'fulfillment', targetField: 'paymentId', when: ['NORMAL'] },
+  { id: 'm10', source: 'orderEvent', sourceField: 'paymentId', target: 'fulfillment', targetField: 'paymentId', when: [{ disc: 'orderEvent::status', values: ['NORMAL'] }] },
   // OrderEvent → RiskApi(input) / RiskApi(output) → FulfillmentRequest (외부 API 를 거치는 흐름)
   { id: 'p1', source: 'orderEvent', sourceField: 'orderId', target: 'riskApi', targetField: 'in.orderId' },
   { id: 'p2', source: 'orderEvent', sourceField: 'userId', target: 'riskApi', targetField: 'in.userId' },

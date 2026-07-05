@@ -22,7 +22,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityNode } from './EntityNode'
 import { ProcessNode } from './ProcessNode'
-import { EntityDialog } from './EntityDialog'
+import { EntityDialog, type FieldChanges } from './EntityDialog'
 import { ProcessDialog } from './ProcessDialog'
 import { uniqueId, nextEntityPos } from './entity-util'
 import { NodeContext, EMPTY_HIGHLIGHT } from './node-context'
@@ -35,6 +35,8 @@ import {
   collectDiscriminators,
   computeDimmed,
   discKey,
+  renameFieldWhens,
+  renameWhen,
   variantColors,
 } from './variant'
 import { EdgeContextMenu } from './EdgeContextMenu'
@@ -234,17 +236,20 @@ export default function Flow({
     () => variantColors(discriminators),
     [discriminators],
   )
-  const activeValues = useMemo(() => {
-    const s = new Set<string>()
-    for (const d of discriminators)
-      s.add(variant[discKey(d.nodeId, d.path)] ?? d.values[0])
-    return s
+  // disc 키 → 현재 선택 값. 선택이 없으면 첫 enum 값이 기본.
+  const activeVariants = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const d of discriminators) {
+      const key = discKey(d.nodeId, d.path)
+      m.set(key, variant[key] ?? d.values[0])
+    }
+    return m
   }, [discriminators, variant])
 
   // 현재 변형에서 "없는" 필드·엣지 (흐리게 표시할 대상)
   const dimmed = useMemo(
-    () => computeDimmed(nodes, edges, activeValues),
-    [nodes, edges, activeValues],
+    () => computeDimmed(nodes, edges, activeVariants),
+    [nodes, edges, activeVariants],
   )
 
   const onSelectVariant = useCallback(
@@ -259,12 +264,50 @@ export default function Flow({
     [],
   )
 
+  // 노드 id 의 필드 편집 결과(changes)에 맞춰 그 노드에 붙은 엣지를 정리한다.
+  // 핸들에 개명을 반영한 뒤에도 리프 경로 집합에 없으면(삭제 또는 object 전환)
+  // 무효한 매핑이므로 엣지를 제거하고, 있으면 핸들만 따라간다 — 무효 매핑이
+  // 자동저장돼 다음 로드의 검증에서 페이지가 잠기는 일을 막는다.
+  // rewriteWhen 이면 엣지의 when.disc 도 개명을 따라간다(엔터티 저장 전용).
+  const reconcileEdges = useCallback(
+    (id: string, changes: FieldChanges, rewriteWhen: boolean) => {
+      const { renames, leafPaths } = changes
+      setEdges((eds) =>
+        eds.flatMap((e) => {
+          let next = e
+          if (e.source === id) {
+            const p = renames.get(e.sourceHandle ?? '') ?? e.sourceHandle ?? ''
+            if (!leafPaths.has(p)) return []
+            if (p !== e.sourceHandle) next = { ...next, sourceHandle: p }
+          }
+          if (e.target === id) {
+            const p = renames.get(e.targetHandle ?? '') ?? e.targetHandle ?? ''
+            if (!leafPaths.has(p)) return []
+            if (p !== e.targetHandle) next = { ...next, targetHandle: p }
+          }
+          if (rewriteWhen && renames.size && next.data?.when)
+            next = {
+              ...next,
+              data: { ...next.data, when: renameWhen(next.data.when, id, renames) },
+            }
+          return [next]
+        }),
+      )
+    },
+    [setEdges],
+  )
+
   // 모달 저장 — 생성이면 새 노드, 수정이면 data 교체(접힘 상태는 보존).
   // setNodes 는 순수 updater 로만 호출하고(다른 setState 안에 중첩 금지 — StrictMode
   // 가 updater 를 두 번 호출해 중복 추가될 수 있다), 모달 닫기는 별도로 처리한다.
+  // 필드가 개명됐으면(renames) 그 경로를 참조하는 곳을 모두 따라 갱신한다:
+  // when.disc(전체 노드·엣지) · 엣지 핸들 · 접힘 상태 · 변형 선택 키.
+  // 엣지 정리(reconcileEdges)는 개명이 없어도 실행한다 — 삭제·object 전환으로
+  // 무효해진 매핑을 걸러내야 하기 때문.
   const saveEntity = useCallback(
-    (data: EntityData) => {
+    (data: EntityData, changes: FieldChanges) => {
       if (!entityDialog) return
+      const { renames } = changes
       if (entityDialog.mode === 'new') {
         setNodes((nds) => [
           ...nds,
@@ -278,16 +321,47 @@ export default function Flow({
       } else {
         const id = entityDialog.id
         setNodes((nds) =>
-          nds.map((n) =>
-            n.id === id && n.type === 'entity'
-              ? { ...n, data: { ...data, collapsed: n.data.collapsed } }
-              : n,
-          ),
+          nds.map((n) => {
+            if (n.id === id && n.type === 'entity') {
+              const fields = renames.size
+                ? renameFieldWhens(data.fields, id, renames)
+                : data.fields
+              const collapsed = n.data.collapsed?.map(
+                (p) => renames.get(p) ?? p,
+              )
+              return { ...n, data: { ...data, fields, collapsed } }
+            }
+            // 다른 엔티티: 이 노드의 discriminator 를 참조하는 when 을 갱신
+            if (renames.size && n.type === 'entity')
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  fields: renameFieldWhens(n.data.fields, id, renames),
+                },
+              }
+            return n
+          }),
         )
+        reconcileEdges(id, changes, true)
+        if (renames.size) {
+          // 좌상단 셀렉터 선택 상태의 disc 키도 따라 바꾼다
+          setVariant((cur) => {
+            const prefix = `${id}::`
+            const out: Record<string, string> = {}
+            for (const [k, v] of Object.entries(cur)) {
+              const next = k.startsWith(prefix)
+                ? renames.get(k.slice(prefix.length))
+                : undefined
+              out[next ? `${prefix}${next}` : k] = v
+            }
+            return out
+          })
+        }
       }
       setEntityDialog(null)
     },
-    [entityDialog, setNodes],
+    [entityDialog, setNodes, reconcileEdges],
   )
 
   // 노드 삭제 — 걸린 엣지도 함께 제거하고 열린 모달을 닫는다.
@@ -308,8 +382,10 @@ export default function Flow({
   )
 
   // 프로세스 저장 — 생성이면 새 노드, 수정이면 data 교체. (setNodes 는 순수 updater 로만)
+  // 연결된 엣지는 항상 정리한다 — 개명된 핸들(in.<>/out.<>)은 따라가고,
+  // 삭제·object 전환으로 무효해진 매핑은 제거.
   const saveProcess = useCallback(
-    (data: ProcessData) => {
+    (data: ProcessData, changes: FieldChanges) => {
       if (!processDialog) return
       if (processDialog.mode === 'new') {
         setNodes((nds) => [
@@ -322,16 +398,18 @@ export default function Flow({
           },
         ])
       } else {
-        const id = processDialog.id
         setNodes((nds) =>
           nds.map((n) =>
-            n.id === id && n.type === 'process' ? { ...n, data } : n,
+            n.id === processDialog.id && n.type === 'process'
+              ? { ...n, data }
+              : n,
           ),
         )
+        reconcileEdges(processDialog.id, changes, false)
       }
       setProcessDialog(null)
     },
-    [processDialog, setNodes],
+    [processDialog, setNodes, reconcileEdges],
   )
 
   const nodeCtx = useMemo(

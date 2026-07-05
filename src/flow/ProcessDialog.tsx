@@ -14,7 +14,15 @@ import { cn } from '@/lib/utils'
 import { KIND_META } from './entity-kind'
 import { KINDS } from './code'
 import { FieldTreeEditor } from './FieldTreeEditor'
-import { toDraft, toField, validate } from './field-draft'
+import {
+  buildRenames,
+  collectLeafPaths,
+  collectPaths,
+  toDraft,
+  toField,
+  validate,
+} from './field-draft'
+import type { FieldChanges } from './EntityDialog'
 import type { EntityKind, ProcessData } from './types'
 
 // 변환/프로세스 노드(블랙박스) 생성·수정 모달.
@@ -29,7 +37,8 @@ export function ProcessDialog({
 }: {
   isNew: boolean
   initial: ProcessData | null
-  onSave: (data: ProcessData) => void
+  // changes 의 경로는 핸들 경로(in./out. 접두 포함) 기준이다.
+  onSave: (data: ProcessData, changes: FieldChanges) => void
   onDelete?: () => void
   onClose: () => void
 }) {
@@ -37,6 +46,10 @@ export function ProcessDialog({
   const [kind, setKind] = useState<EntityKind>(initial?.kind ?? 'api')
   const [inputs, setInputs] = useState(() => toDraft(initial?.inputs ?? []))
   const [outputs, setOutputs] = useState(() => toDraft(initial?.outputs ?? []))
+  // 열었을 때의 _k → 핸들 경로. 저장 시점과 비교해 개명을 알아낸다.
+  const [origPaths] = useState(
+    () => new Map([...collectPaths(inputs, 'in'), ...collectPaths(outputs, 'out')]),
+  )
   const [error, setError] = useState<string | null>(null)
   // 삭제 버튼 2단계 확인 — 한 번 누르면 "정말 삭제" 로 바뀌고, 다시 누르면 삭제
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -48,12 +61,25 @@ export function ProcessDialog({
     if (ei) return setError(ei)
     const eo = validate(outputs, 'output')
     if (eo) return setError(eo)
-    onSave({
-      name: nm,
-      kind,
-      inputs: inputs.map(toField),
-      outputs: outputs.map(toField),
-    })
+    const nextPaths = new Map([
+      ...collectPaths(inputs, 'in'),
+      ...collectPaths(outputs, 'out'),
+    ])
+    onSave(
+      {
+        name: nm,
+        kind,
+        inputs: inputs.map(toField),
+        outputs: outputs.map(toField),
+      },
+      {
+        renames: buildRenames(origPaths, nextPaths),
+        leafPaths: new Set([
+          ...collectLeafPaths(inputs, 'in'),
+          ...collectLeafPaths(outputs, 'out'),
+        ]),
+      },
+    )
   }
 
   return (
