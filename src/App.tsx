@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { TriangleAlert } from 'lucide-react'
+import { LoaderCircle, TriangleAlert } from 'lucide-react'
 import Flow from './flow/Flow'
 import { graphFromDoc } from './flow/code'
 import { InvalidPagePanel } from './pages/InvalidPagePanel'
@@ -46,30 +46,49 @@ function App() {
           {STORAGE_NOTICE[pages.storage]}
         </div>
       )}
-      <div className="flex min-h-0 flex-1">
-        <PageSidebar
-          pages={pages.pages}
-          currentId={pages.currentId}
-          onSelect={pages.select}
-          onCreate={pages.create}
-          onRename={pages.rename}
-          onRemove={pages.remove}
-        />
-        {/* key 리마운트로 페이지 전환 — 페이지 종속 UI 상태를 통째로 초기화 */}
-        {graph.ok ? (
-          <Flow
-            key={pages.currentId}
-            initialNodes={graph.nodes}
-            initialEdges={graph.edges}
-            onGraphChange={pages.saveGraph}
+      <div
+        className="relative flex min-h-0 flex-1"
+        aria-busy={pages.importing}
+      >
+        <div className="flex min-h-0 flex-1" inert={pages.importing}>
+          <PageSidebar
+            pages={pages.pages}
+            currentId={pages.currentId}
+            onSelect={pages.select}
+            onCreate={pages.create}
+            onRename={pages.rename}
+            onRemove={pages.remove}
+            onExport={pages.exportPages}
+            onImport={pages.importPages}
           />
-        ) : (
-          <InvalidPagePanel
-            key={pages.currentId}
-            errors={graph.errors}
-            doc={graph.doc}
-            onReset={() => pages.reset(pages.currentId!)}
-          />
+          {/* key 리마운트로 페이지 전환 — 페이지 종속 UI 상태를 통째로 초기화 */}
+          {graph.ok ? (
+            <Flow
+              key={pages.currentId}
+              initialNodes={graph.nodes}
+              initialEdges={graph.edges}
+              onGraphChange={pages.saveGraph}
+            />
+          ) : (
+            <InvalidPagePanel
+              key={pages.currentId}
+              errors={graph.errors}
+              doc={graph.doc}
+              onReset={() => pages.reset(pages.currentId!)}
+            />
+          )}
+        </div>
+        {pages.importing && (
+          <div
+            className="absolute inset-0 z-50 flex cursor-wait items-center justify-center bg-background/60 backdrop-blur-[1px]"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm">
+              <LoaderCircle className="size-4 animate-spin" />
+              백업 가져오는 중…
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -6,10 +6,13 @@ import {
   deletePage,
   listPages,
   putPage,
+  putPages,
+  replaceAllPages,
   readLastPageId,
   writeLastPageId,
   type PageRecord,
 } from './db'
+import { downloadPages, parseBackup } from './backup'
 import type { AppNode } from '../flow/node-types'
 import type { MappingEdge } from '../flow/edge-kind'
 
@@ -24,6 +27,13 @@ import type { MappingEdge } from '../flow/edge-kind'
 // 저장소 상태 — 'disabled' 는 IndexedDB 자체를 못 여는 경우(메모리 전용 모드),
 // 'error' 는 쓰기 실패(재시도 대기). 둘 다 App 이 배너로 알린다.
 export type StorageStatus = 'ok' | 'error' | 'disabled'
+
+// 백업 가져오기 방식: 'merge' 는 새 id 로 뒤에 추가(비파괴), 'overwrite' 는 기존
+// 페이지를 전부 버리고 파일 내용으로 교체(id 보존 = 완전 복원).
+export type ImportMode = 'merge' | 'overwrite'
+export type ImportResult =
+  | { ok: true; imported: number; skipped: number; mode: ImportMode }
+  | { ok: false; reason: 'read' | 'format' | 'empty' | 'storage' | 'busy' }
 
 const DOC_OPTS = { position: true, collapsed: true } as const
 const SAVE_DEBOUNCE_MS = 400
@@ -55,6 +65,7 @@ export function usePages() {
   const [pages, setPages] = useState<PageRecord[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [storage, setStorage] = useState<StorageStatus>('ok')
+  const [isImporting, setIsImporting] = useState(false)
   // IndexedDB 를 못 여는 환경 — 이후 모든 디스크 쓰기를 건너뛴다
   const disabled = useRef(false)
   // 콜백들이 최신 상태를 보도록 ref 미러를 함께 유지한다
@@ -68,6 +79,11 @@ export function usePages() {
   // 페이지별로 디스크에 기록이 "확인된" 내용(savedKey) — 중복 저장 스킵과
   // 실패 재시도 판단의 기준. 쓰기가 실패하면 갱신하지 않아 다음 flush 가 재시도가 된다.
   const lastSaved = useRef(new Map<string, string>())
+  // 백업 가져오기 진행 중 잠금 — replaceAllPages/putPages 를 await 하는 동안 UI 가
+  // 살아있어 생기는 창을 닫는다. 중복 import 재진입을 막고(자가 치유 안 됨),
+  // 진행 중엔 CRUD·자동저장을 짧게 미뤄 stale 레코드가 import 트랜잭션 뒤에
+  // 다시 기록되는(부활) 것을 방지한다.
+  const importing = useRef(false)
 
   const applyPages = useCallback((next: PageRecord[]) => {
     pagesRef.current = next
@@ -163,6 +179,7 @@ export function usePages() {
   // Flow 의 onGraphChange 훅업 — 디바운스 자동저장.
   const saveGraph = useCallback(
     (nodes: AppNode[], edges: MappingEdge[]) => {
+      if (importing.current) return // import 완료까지 자동저장 보류 (importing ref 주석 참고)
       const id = currentIdRef.current
       if (!id) return
       const rec = pagesRef.current.find((r) => r.id === id)
@@ -199,6 +216,7 @@ export function usePages() {
   )
 
   const create = useCallback(() => {
+    if (importing.current) return
     flush()
     const rec = makeRecord(uniqueName('새 페이지', pagesRef.current), emptyDoc())
     applyPages([...pagesRef.current, rec])
@@ -208,6 +226,7 @@ export function usePages() {
 
   const rename = useCallback(
     (id: string, name: string) => {
+      if (importing.current) return
       const rec = pagesRef.current.find((r) => r.id === id)
       if (!rec || rec.name === name) return
       const next = { ...rec, name, updatedAt: Date.now() }
@@ -221,6 +240,7 @@ export function usePages() {
   // (자동으로 호출되는 곳은 없다 — InvalidPagePanel 의 버튼이 유일한 진입점)
   const reset = useCallback(
     (id: string) => {
+      if (importing.current) return
       const rec = pagesRef.current.find((r) => r.id === id)
       if (!rec) return
       const next = { ...rec, doc: emptyDoc(), updatedAt: Date.now() }
@@ -232,6 +252,7 @@ export function usePages() {
 
   const remove = useCallback(
     (id: string) => {
+      if (importing.current) return
       // 지우려는 페이지의 대기분은 버린다
       pendingDocs.current.delete(id)
       lastSaved.current.delete(id)
@@ -258,6 +279,101 @@ export function usePages() {
         selectInternal(rest[Math.min(idx, rest.length - 1)].id)
     },
     [applyPages, selectInternal, persist],
+  )
+
+  // 모든 페이지를 JSON 파일로 내보낸다. 먼저 flush 해 진행 중 편집을 pagesRef 에
+  // 반영한 뒤(최신 doc 포함) 스냅샷을 저장한다.
+  const exportPages = useCallback(() => {
+    flush()
+    downloadPages(pagesRef.current)
+  }, [flush])
+
+  // 백업 파일을 읽어 페이지를 복원한다.
+  //   merge     — 새 id 를 부여하고 이름 충돌을 피해 목록 뒤에 추가(기존 유지)
+  //   overwrite — 기존 페이지를 전부 버리고 파일 내용으로 교체(id 그대로 복원)
+  // 성공하면 가져온 첫 페이지를 선택한다. 실패 사유는 결과로 돌려 UI 가 안내한다.
+  const importPages = useCallback(
+    async (file: File, mode: ImportMode): Promise<ImportResult> => {
+      // 이미 가져오는 중이면 거절한다 — 겹친 import 는 stale 스냅샷으로 서로를 덮는다.
+      // 잠금은 여기서 잡고, 어떤 경로로 끝나든 finally 에서 반드시 푼다.
+      if (importing.current) return { ok: false, reason: 'busy' }
+      importing.current = true
+      setIsImporting(true)
+      try {
+        let text: string
+        try {
+          text = await file.text()
+        } catch {
+          return { ok: false, reason: 'read' }
+        }
+        const parsed = parseBackup(text)
+        if (!parsed) return { ok: false, reason: 'format' }
+        if (parsed.pages.length === 0) return { ok: false, reason: 'empty' }
+
+        // 진행 중이던 편집을 먼저 확정한다 (merge 시 유실 방지)
+        flush()
+
+        // 디스크에 확정된 뒤에만 화면 상태를 바꾸고 성공을 돌린다 —
+        // 실패하면 트랜잭션이 롤백되므로 기존 상태를 그대로 두고 storage 오류를 알린다.
+        const markSaved = (recs: PageRecord[]) => {
+          for (const rec of recs)
+            lastSaved.current.set(rec.id, savedKey(rec.name, rec.doc))
+        }
+
+        if (mode === 'overwrite') {
+          const list = parsed.pages
+          if (!disabled.current) {
+            try {
+              await replaceAllPages(list)
+            } catch (e) {
+              console.warn('[lineage] 페이지를 덮어쓰지 못했습니다:', e)
+              return { ok: false, reason: 'storage' }
+            }
+          }
+          // 확정 성공 — 기존 대기분·확정본 캐시를 파일 내용으로 재설정한다
+          pendingDocs.current.clear()
+          pendingDeletes.current.clear()
+          lastSaved.current.clear()
+          markSaved(list)
+          applyPages(list)
+          selectInternal(list[0].id)
+          maybeClearError()
+          return { ok: true, imported: list.length, skipped: parsed.skipped, mode }
+        }
+
+        // merge — 새 id + 이름 충돌 회피, 목록 뒤에 추가.
+        // createdAt 은 가져오기 시점으로 새로 찍는다 — 원본을 보존하면 listPages 가
+        // createdAt 순으로 정렬해 재실행 후 순서가 바뀐다("뒤에 추가"와 어긋남).
+        const existing = [...pagesRef.current]
+        const now = Date.now()
+        const added: PageRecord[] = []
+        parsed.pages.forEach((rec, i) => {
+          added.push({
+            ...rec,
+            id: crypto.randomUUID(),
+            name: uniqueName(rec.name, [...existing, ...added]),
+            createdAt: now + i, // 같은 ms 라도 가져온 순서를 유지
+            updatedAt: now + i,
+          })
+        })
+        if (!disabled.current) {
+          try {
+            await putPages(added)
+          } catch (e) {
+            console.warn('[lineage] 가져온 페이지를 저장하지 못했습니다:', e)
+            return { ok: false, reason: 'storage' }
+          }
+        }
+        markSaved(added)
+        applyPages([...existing, ...added])
+        selectInternal(added[0].id)
+        return { ok: true, imported: added.length, skipped: parsed.skipped, mode }
+      } finally {
+        importing.current = false
+        setIsImporting(false)
+      }
+    },
+    [flush, applyPages, selectInternal, maybeClearError],
   )
 
   // 초기 로드 — StrictMode 이중 실행 가드.
@@ -331,11 +447,14 @@ export function usePages() {
     currentId,
     current,
     storage,
+    importing: isImporting,
     select,
     create,
     rename,
     remove,
     reset,
     saveGraph,
+    exportPages,
+    importPages,
   }
 }

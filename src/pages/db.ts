@@ -44,6 +44,22 @@ export async function deletePage(id: string): Promise<void> {
   await (await db()).delete(STORE, id)
 }
 
+// 여러 페이지를 하나의 readwrite 트랜잭션으로 기록한다 (백업 "병합 가져오기").
+// 도중 하나라도 실패하면 트랜잭션이 통째로 롤백된다 — 부분 저장이 남지 않는다.
+export async function putPages(pages: PageRecord[]): Promise<void> {
+  const tx = (await db()).transaction(STORE, 'readwrite')
+  await Promise.all([...pages.map((rec) => tx.store.put(rec)), tx.done])
+}
+
+// 스토어를 비우고 주어진 페이지로 교체한다 (백업 "덮어쓰기 복원").
+// clear + 전체 put 을 한 트랜잭션에 묶어 원자적으로 처리한다 — put 이 실패하면
+// clear 도 롤백돼, 성공 알림과 달리 DB 가 비어 버리는 사고를 막는다.
+export async function replaceAllPages(pages: PageRecord[]): Promise<void> {
+  const tx = (await db()).transaction(STORE, 'readwrite')
+  await tx.store.clear()
+  await Promise.all([...pages.map((rec) => tx.store.put(rec)), tx.done])
+}
+
 // 마지막으로 열었던 페이지 — DB 에 넣을 만큼 무겁지 않아 localStorage 에 둔다.
 // localStorage 가 막혀 있어도(프라이빗 모드 등) 치명적이지 않으니 조용히 무시한다.
 export function readLastPageId(): string | null {
