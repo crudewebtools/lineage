@@ -193,8 +193,8 @@ export const mappings: FieldMapping[] = [
   // AccountDb → FulfillmentRequest
   { id: 'm8', source: 'accountDb', sourceField: 'plan', target: 'fulfillment', targetField: 'plan' },
   { id: 'm9', source: 'accountDb', sourceField: 'region', target: 'fulfillment', targetField: 'region' },
-  // 조건부 매핑 — NORMAL 일 때만 결제 정보가 흘러간다 (CANCELED 면 양 끝이 흐려짐)
-  { id: 'm10', source: 'orderEvent', sourceField: 'paymentId', target: 'fulfillment', targetField: 'paymentId', when: [{ disc: 'orderEvent::status', values: ['NORMAL'] }] },
+  // paymentId 는 NORMAL 전용 필드 — 이 엣지는 출발 필드가 흐려질 때 자동으로 함께 흐려진다
+  { id: 'm10', source: 'orderEvent', sourceField: 'paymentId', target: 'fulfillment', targetField: 'paymentId' },
   // OrderEvent → RiskApi(input) / RiskApi(output) → FulfillmentRequest (외부 API 를 거치는 흐름)
   { id: 'p1', source: 'orderEvent', sourceField: 'orderId', target: 'riskApi', targetField: 'in.orderId' },
   { id: 'p2', source: 'orderEvent', sourceField: 'userId', target: 'riskApi', targetField: 'in.userId' },
@@ -212,6 +212,6 @@ export const initialEdges: MappingEdge[] = mappings.map((m) => {
     targetHandle: m.targetField,
     label: m.label,
     style: edgeKindProps(kind).style,
-    data: { kind, ...(m.when?.length ? { when: m.when } : {}) },
+    data: { kind },
   }
 })

@@ -75,15 +75,22 @@ const VARIANT_PALETTE: VariantColor[] = [
   { badge: 'border-fuchsia-500/40 text-fuchsia-600', text: 'text-fuchsia-600' },
 ]
 
-// 그래프의 모든 (discriminator, 값) 쌍을 (discriminator 순서 → enumValues 순서)
-// 로 안정적으로 모아 팔레트 슬롯을 매긴다. 키는 valueKey(disc, 값) — 같은 값
-// 이름이 다른 discriminator 에 있어도 서로 다른 색이라 소속이 구분된다.
+// (discriminator, 값) 쌍마다 팔레트 슬롯을 매긴다. 키는 valueKey(disc, 값).
+// 팔레트 인덱스는 "엔터티마다 0부터" 리셋한다 — 변형이 엔터티 내부 개념이라
+// 색의 역할도 엔터티 안에서의 구분이고, 무엇보다 자기 엔터티 목록만 보는
+// 모달(팝오버)과 그래프 전체를 보는 캔버스가 같은 색을 배정하게 된다.
+// 한 엔터티 안의 값들은 팔레트 크기 안에선 서로 다른 색이 보장된다.
 export function variantColors(
   discriminators: Discriminator[],
 ): Map<string, VariantColor> {
   const map = new Map<string, VariantColor>()
   let i = 0
+  let lastNode: string | null = null
   for (const d of discriminators) {
+    if (d.nodeId !== lastNode) {
+      i = 0
+      lastNode = d.nodeId
+    }
     const dk = discKey(d.nodeId, d.path)
     for (const v of d.values) {
       map.set(valueKey(dk, v), VARIANT_PALETTE[i % VARIANT_PALETTE.length])
@@ -108,41 +115,35 @@ export function matchWhen(
   })
 }
 
-// ── 필드 개명 전파 ────────────────────────────────────────────────────
-// nodeId 의 필드 경로가 renames(옛 경로 → 새 경로)대로 바뀌었을 때, when 절의
-// disc 키를 따라 바꾼다. 다른 노드를 가리키는 절은 건드리지 않는다.
-export function renameWhen(
-  when: When | undefined,
-  nodeId: string,
-  renames: ReadonlyMap<string, string>,
-): When | undefined {
-  if (!when) return when
-  const prefix = `${nodeId}::`
-  return when.map((c) => {
-    if (!c.disc.startsWith(prefix)) return c
-    const next = renames.get(c.disc.slice(prefix.length))
-    return next ? { ...c, disc: `${nodeId}::${next}` } : c
-  })
-}
+// ── 모달 편집 지원 ────────────────────────────────────────────────────
+// 새 엔터티는 노드 id 가 저장 시점에 만들어지므로, 모달에서 자기 discriminator 를
+// 참조하는 when 은 disc 를 "$self::경로" 로 임시로 담는다. 실제 id 의 허용 문자
+// (영문·숫자·_·-)에 '$' 가 없어 진짜 노드 id 와 충돌하지 않는다.
+export const SELF_NODE = '$self'
 
-// 필드 트리 전체의 when 절에 renameWhen 을 적용한 새 트리를 만든다
-export function renameFieldWhens(
-  fields: Field[],
-  nodeId: string,
-  renames: ReadonlyMap<string, string>,
-): Field[] {
-  return fields.map((f) => ({
-    ...f,
-    ...(f.when ? { when: renameWhen(f.when, nodeId, renames) } : {}),
-    ...(f.children?.length
-      ? { children: renameFieldWhens(f.children, nodeId, renames) }
-      : {}),
-  }))
+// 저장 직전 "$self::" 참조를 실제 노드 id 로 치환한 새 필드 트리를 만든다.
+export function assignSelfDiscs(fields: Field[], id: string): Field[] {
+  const prefix = `${SELF_NODE}::`
+  const fix = (list: Field[]): Field[] =>
+    list.map((f) => ({
+      ...f,
+      ...(f.when
+        ? {
+            when: f.when.map((c) =>
+              c.disc.startsWith(prefix)
+                ? { ...c, disc: `${id}::${c.disc.slice(prefix.length)}` }
+                : c,
+            ),
+          }
+        : {}),
+      ...(f.children?.length ? { children: fix(f.children) } : {}),
+    }))
+  return fix(fields)
 }
 
 // 현재 변형 선택(active: disc 키 → 값)에서 "없는" 필드/엣지를 계산한다.
 //  - 필드 : when 이 안 맞으면 dim. 조상이 dim 이면 하위도 모두 dim(object 통째 사라짐).
-//  - 엣지 : 자기 when 이 안 맞거나, 양 끝 필드가 dim 이면 dim.
+//  - 엣지 : 양 끝 필드 중 하나라도 dim 이면 dim (엣지 자체 조건은 없다).
 export function computeDimmed(
   nodes: AppNode[],
   edges: MappingEdge[],
@@ -164,10 +165,9 @@ export function computeDimmed(
 
   const edgeIds = new Set<string>()
   for (const e of edges) {
-    const ownDim = !matchWhen(e.data?.when, active)
     const srcDim = fields.has(fieldKey(e.source, e.sourceHandle ?? ''))
     const tgtDim = fields.has(fieldKey(e.target, e.targetHandle ?? ''))
-    if (ownDim || srcDim || tgtDim) edgeIds.add(e.id)
+    if (srcDim || tgtDim) edgeIds.add(e.id)
   }
   return { fields, edges: edgeIds }
 }

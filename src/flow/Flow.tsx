@@ -32,11 +32,10 @@ import { EdgeKindControl } from './EdgeKindControl'
 import { NodeVisibilityPanel } from './NodeVisibilityPanel'
 import { VariantControl } from './VariantControl'
 import {
+  assignSelfDiscs,
   collectDiscriminators,
   computeDimmed,
   discKey,
-  renameFieldWhens,
-  renameWhen,
   variantColors,
 } from './variant'
 import { EdgeContextMenu } from './EdgeContextMenu'
@@ -44,10 +43,6 @@ import { edgeKindProps, type MappingEdge } from './edge-kind'
 import { rerouteCollapsedEdges } from './collapse'
 import type { AppNode } from './node-types'
 import type { EntityData, MappingKind, ProcessData } from './types'
-
-// 컨텍스트 메뉴 크기 — 화면 밖으로 나가지 않게 클램프할 때 쓴다
-const MENU_W = 208
-const MENU_H = 220
 
 // 한 페이지의 그래프를 그린다. 페이지 전환은 부모(App)가 key={pageId} 리마운트로
 // 처리한다 — 호버·변형 선택·메뉴 같은 페이지 종속 상태가 자연스럽게 초기화된다.
@@ -121,7 +116,9 @@ export default function Flow({
     return () => pane.removeEventListener('mousedown', onDown, true)
   }, [])
 
-  // 엣지 클릭/우클릭 → 컨텍스트 메뉴를 커서 위치에 연다 (컨테이너 안으로 클램프)
+  // 엣지 클릭/우클릭 → 컨텍스트 메뉴를 커서 위치에 연다.
+  // 화면 밖 클램프·아래 공간 부족 시 위로 뒤집기는 메뉴가 실제 크기를 재서
+  // 스스로 처리한다 (when 섹션 때문에 높이를 미리 알 수 없다).
   const openMenu = useCallback((event: MouseEvent, edge: MappingEdge) => {
     // 좌클릭이 드래그(패닝)였으면 메뉴를 열지 않는다 — 임계값 5px
     if (event.type === 'click' && edgeDownPos.current) {
@@ -132,9 +129,11 @@ export default function Flow({
     event.preventDefault()
     const rect = paneRef.current?.getBoundingClientRect()
     if (!rect) return
-    const x = Math.max(0, Math.min(event.clientX - rect.left, rect.width - MENU_W))
-    const y = Math.max(0, Math.min(event.clientY - rect.top, rect.height - MENU_H))
-    setMenu({ edgeId: edge.id, x, y })
+    setMenu({
+      edgeId: edge.id,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    })
   }, [])
 
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -237,11 +236,14 @@ export default function Flow({
     [discriminators],
   )
   // disc 키 → 현재 선택 값. 선택이 없으면 첫 enum 값이 기본.
+  // 선택해 둔 값이 enum 에서 삭제됐으면(유령 선택) 첫 값으로 폴백한다 —
+  // 편집·JSON 적용·가져오기 등 어디서 stale 이 생겼든 읽는 지점에서 걸러진다.
   const activeVariants = useMemo(() => {
     const m = new Map<string, string>()
     for (const d of discriminators) {
       const key = discKey(d.nodeId, d.path)
-      m.set(key, variant[key] ?? d.values[0])
+      const sel = variant[key]
+      m.set(key, sel && d.values.includes(sel) ? sel : d.values[0])
     }
     return m
   }, [discriminators, variant])
@@ -268,9 +270,8 @@ export default function Flow({
   // 핸들에 개명을 반영한 뒤에도 리프 경로 집합에 없으면(삭제 또는 object 전환)
   // 무효한 매핑이므로 엣지를 제거하고, 있으면 핸들만 따라간다 — 무효 매핑이
   // 자동저장돼 다음 로드의 검증에서 페이지가 잠기는 일을 막는다.
-  // rewriteWhen 이면 엣지의 when.disc 도 개명을 따라간다(엔터티 저장 전용).
   const reconcileEdges = useCallback(
-    (id: string, changes: FieldChanges, rewriteWhen: boolean) => {
+    (id: string, changes: FieldChanges) => {
       const { renames, leafPaths } = changes
       setEdges((eds) =>
         eds.flatMap((e) => {
@@ -285,11 +286,6 @@ export default function Flow({
             if (!leafPaths.has(p)) return []
             if (p !== e.targetHandle) next = { ...next, targetHandle: p }
           }
-          if (rewriteWhen && renames.size && next.data?.when)
-            next = {
-              ...next,
-              data: { ...next.data, when: renameWhen(next.data.when, id, renames) },
-            }
           return [next]
         }),
       )
@@ -309,41 +305,38 @@ export default function Flow({
       if (!entityDialog) return
       const { renames } = changes
       if (entityDialog.mode === 'new') {
-        setNodes((nds) => [
-          ...nds,
-          {
-            id: uniqueId(data.name, nds),
-            type: 'entity',
-            position: nextEntityPos(nds),
-            data,
-          },
-        ])
+        // 노드 id 는 여기서 만들어지므로, 모달이 "$self::" 로 담아둔
+        // 자기 discriminator 참조를 실제 id 로 치환한다.
+        setNodes((nds) => {
+          const id = uniqueId(data.name, nds)
+          return [
+            ...nds,
+            {
+              id,
+              type: 'entity',
+              position: nextEntityPos(nds),
+              data: { ...data, fields: assignSelfDiscs(data.fields, id) },
+            },
+          ]
+        })
       } else {
         const id = entityDialog.id
+        // when 은 자기 엔터티 안에서만 참조되고(엔터티 내부 변형), 다이얼로그의
+        // 저장 변환(draftsToFields)이 when 을 최종 경로로 역번역·정리해 주므로
+        // data.fields 는 이미 일관 상태다 — 여기서는 접힘 경로와 엣지 핸들만
+        // 개명을 따라가면 된다.
         setNodes((nds) =>
           nds.map((n) => {
             if (n.id === id && n.type === 'entity') {
-              const fields = renames.size
-                ? renameFieldWhens(data.fields, id, renames)
-                : data.fields
               const collapsed = n.data.collapsed?.map(
                 (p) => renames.get(p) ?? p,
               )
-              return { ...n, data: { ...data, fields, collapsed } }
+              return { ...n, data: { ...data, collapsed } }
             }
-            // 다른 엔티티: 이 노드의 discriminator 를 참조하는 when 을 갱신
-            if (renames.size && n.type === 'entity')
-              return {
-                ...n,
-                data: {
-                  ...n.data,
-                  fields: renameFieldWhens(n.data.fields, id, renames),
-                },
-              }
             return n
           }),
         )
-        reconcileEdges(id, changes, true)
+        reconcileEdges(id, changes)
         if (renames.size) {
           // 좌상단 셀렉터 선택 상태의 disc 키도 따라 바꾼다
           setVariant((cur) => {
@@ -405,7 +398,7 @@ export default function Flow({
               : n,
           ),
         )
-        reconcileEdges(processDialog.id, changes, false)
+        reconcileEdges(processDialog.id, changes)
       }
       setProcessDialog(null)
     },
@@ -418,6 +411,8 @@ export default function Flow({
       onFieldHover,
       onEditEntity,
       onEditProcess,
+      // when 배지 클릭 → 그 변형으로 전환 (disc 키 = 셀렉터 키라 그대로 통한다)
+      onSelectVariant,
       highlightedFields: highlight?.fields ?? EMPTY_HIGHLIGHT,
       dimmedFields: dimmed.fields,
       variantColors: variantColorMap,
@@ -427,6 +422,7 @@ export default function Flow({
       onFieldHover,
       onEditEntity,
       onEditProcess,
+      onSelectVariant,
       highlight,
       dimmed,
       variantColorMap,
@@ -507,7 +503,7 @@ export default function Flow({
           <Panel position="top-left">
             <VariantControl
               discriminators={discriminators}
-              selections={variant}
+              selections={activeVariants}
               colors={variantColorMap}
               onChange={onSelectVariant}
             />
@@ -570,6 +566,7 @@ export default function Flow({
           key={entityDialog.mode === 'edit' ? entityDialog.id : 'new'}
           isNew={entityDialog.mode === 'new'}
           initial={entityInitial}
+          nodeId={entityDialog.mode === 'edit' ? entityDialog.id : null}
           onSave={saveEntity}
           onDelete={
             entityDialog.mode === 'edit'

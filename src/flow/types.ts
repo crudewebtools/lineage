@@ -11,9 +11,12 @@ export type FieldType =
   | 'json'
 
 // ── 입력 변형 조건 ────────────────────────────────────────────────────
+// 입력 변형은 "엔터티 내부" 의 discriminated union 이다 — 같은 엔터티의
+// discriminator 필드 값에 따라 그 엔터티의 다른 필드 존재 여부가 갈린다.
 // when 절 하나 — disc 가 가리키는 discriminator 의 현재 선택 값이 values 중
-// 하나일 때 성립한다(values 안은 OR). disc 는 "노드id::필드경로" (variant.ts 의
-// discKey 와 같은 형식). 예: { disc: 'orderEvent::status', values: ['CANCELED'] }
+// 하나일 때 성립한다(values 안은 OR). disc 는 "노드id::필드경로" 형식이며
+// 반드시 "자기 엔터티" 의 discriminator 여야 한다(검증에서 강제).
+// 예: { disc: 'orderEvent::status', values: ['CANCELED'] }
 export type WhenClause = {
   disc: string
   values: string[]
@@ -83,9 +86,6 @@ export type FieldMapping = {
   kind?: MappingKind
   /** 변환 메모 등 (선택) */
   label?: string
-  /**
-   * 조건부 매핑 — 모든 when 절이 성립할 때만(AND) "있는" 엣지.
-   * 없으면 항상 존재. (양 끝 필드가 변형으로 사라지면 엣지도 자동으로 흐려진다)
-   */
-  when?: When
+  // 매핑에는 when 이 없다 — 조건부 필드에 걸린 엣지는 끝 필드가 변형으로
+  // 사라질 때 자동으로 함께 흐려진다 (computeDimmed 의 끝단 전파).
 }

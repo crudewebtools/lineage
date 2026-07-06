@@ -44,8 +44,10 @@ import {
   removeTree,
   reorderTree,
   siblingKeys,
+  type DraftDiscOption,
   type DraftField,
 } from './field-draft'
+import { VariantPopover } from './VariantPopover'
 import type { FieldType } from './types'
 
 // 행에서 호출하는 편집 콜백 묶음 (트리 전체로 내려간다).
@@ -59,6 +61,8 @@ type RowHandlers = {
 // 재귀 필드 트리 에디터 (엔터티 fields / 프로세스 inputs·outputs 공용).
 //  - nested=true  : object 타입에 하위 필드 추가·접기 가능 (엔터티)
 //  - nested=false : 플랫 리스트 (프로세스 input/output — 핸들이 한 단계라 중첩 미지원)
+//  - discOptions  : 주어지면 행마다 입력 변형 팝오버(⑂)를 단다 — 자기 엔터티의
+//    discriminator 목록. 엔터티 모달만 전달한다(프로세스 필드는 변형 미지원).
 // 순서 변경은 행 좌측 손잡이를 드래그 (같은 부모 안에서만 재배치).
 // 펼친 object 는 펼친 모습 그대로 DragOverlay 로 떠서 끌린다.
 export function FieldTreeEditor({
@@ -67,12 +71,14 @@ export function FieldTreeEditor({
   fields,
   setFields,
   nested = true,
+  discOptions,
 }: {
   title: string
   addLabel: string
   fields: DraftField[]
   setFields: Dispatch<SetStateAction<DraftField[]>>
   nested?: boolean
+  discOptions?: DraftDiscOption[]
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   // 드래그 중인 행의 _k 와 폭 — DragOverlay 복제본을 그릴 때 쓴다.
@@ -162,6 +168,7 @@ export function FieldTreeEditor({
             nested={nested}
             collapsed={collapsed}
             handlers={handlers}
+            discOptions={discOptions}
           />
           {/* 끌리는 행(과 펼친 하위)의 복제본 — 커서를 따라 떠다닌다.
               dropAnimation=null: 놓는 순간 바로 사라진다 (실제 행은 이미 제자리로 이동).
@@ -180,6 +187,7 @@ export function FieldTreeEditor({
                     nested={nested}
                     collapsed={collapsed}
                     handlers={handlers}
+                    discOptions={discOptions}
                   />
                 </div>
               ) : null}
@@ -198,12 +206,14 @@ function FieldRows({
   nested,
   collapsed,
   handlers,
+  discOptions,
 }: {
   fields: DraftField[]
   depth: number
   nested: boolean
   collapsed: Set<string>
   handlers: RowHandlers
+  discOptions?: DraftDiscOption[]
 }) {
   // 같은 부모 그룹은 하나의 SortableContext — 형제끼리만 재배치된다.
   return (
@@ -219,6 +229,7 @@ function FieldRows({
           nested={nested}
           collapsed={collapsed}
           handlers={handlers}
+          discOptions={discOptions}
         />
       ))}
     </SortableContext>
@@ -231,12 +242,14 @@ function FieldRow({
   nested,
   collapsed,
   handlers,
+  discOptions,
 }: {
   field: DraftField
   depth: number
   nested: boolean
   collapsed: Set<string>
   handlers: RowHandlers
+  discOptions?: DraftDiscOption[]
 }) {
   const {
     setNodeRef,
@@ -266,6 +279,7 @@ function FieldRow({
         canNest={canNest}
         isCollapsed={isCollapsed}
         handlers={handlers}
+        discOptions={discOptions}
         handleRef={setActivatorNodeRef}
         handleProps={{ ...attributes, ...listeners }}
       />
@@ -276,6 +290,7 @@ function FieldRow({
           nested={nested}
           collapsed={collapsed}
           handlers={handlers}
+          discOptions={discOptions}
         />
       )}
       {showChildren && f.children.length === 0 && (
@@ -297,12 +312,14 @@ function OverlayRows({
   nested,
   collapsed,
   handlers,
+  discOptions,
 }: {
   fields: DraftField[]
   depth: number
   nested: boolean
   collapsed: Set<string>
   handlers: RowHandlers
+  discOptions?: DraftDiscOption[]
 }) {
   return (
     <>
@@ -318,6 +335,7 @@ function OverlayRows({
               canNest={canNest}
               isCollapsed={isCollapsed}
               handlers={handlers}
+              discOptions={discOptions}
             />
             {showChildren && (
               <OverlayRows
@@ -326,6 +344,7 @@ function OverlayRows({
                 nested={nested}
                 collapsed={collapsed}
                 handlers={handlers}
+                discOptions={discOptions}
               />
             )}
           </div>
@@ -342,6 +361,7 @@ function RowBar({
   canNest,
   isCollapsed,
   handlers: { onPatch, onRemove, onAddChild, onToggleCollapse },
+  discOptions,
   handleRef,
   handleProps,
 }: {
@@ -350,6 +370,7 @@ function RowBar({
   canNest: boolean
   isCollapsed: boolean
   handlers: RowHandlers
+  discOptions?: DraftDiscOption[]
   handleRef?: (el: HTMLElement | null) => void
   handleProps?: Record<string, unknown>
 }) {
@@ -429,6 +450,15 @@ function RowBar({
           )}
         />
       </button>
+
+      {/* 입력 변형 설정 (엔터티 모달만 — discOptions 가 있을 때) */}
+      {discOptions && (
+        <VariantPopover
+          field={f}
+          discOptions={discOptions}
+          onPatch={(p) => onPatch(f._k, p)}
+        />
+      )}
 
       {canNest && (
         <button

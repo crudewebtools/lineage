@@ -97,7 +97,6 @@ export function graphToDoc(
     }
     if (e.data?.kind && e.data.kind !== 'keep') m.kind = e.data.kind
     if (typeof e.label === 'string' && e.label) m.label = e.label
-    if (e.data?.when?.length) m.when = e.data.when
     return m
   })
   return { entities, processes, mappings }
@@ -278,11 +277,12 @@ export function graphFromDoc(
       errors.push(`${where}.kind 는 keep | transform 이어야 합니다.`)
     if (raw.label != null && typeof raw.label !== 'string')
       errors.push(`${where}.label 은 문자열이어야 합니다.`)
-    if (raw.when != null && !isWhen(raw.when)) {
+    // 매핑에는 when 이 없다 — 조건부 필드에 걸린 엣지는 끝 필드를 따라 흐려진다
+    if (raw.when != null) {
       if (lenient) delete raw.when
       else
         errors.push(
-          `${where}.when 은 { disc, values } 절의 배열이어야 합니다. 예: [{ "disc": "노드id::경로", "values": ["A"] }]`,
+          `${where}.when 은 지원하지 않습니다 — 매핑은 끝 필드의 when 을 따라 흐려집니다.`,
         )
     }
   })
@@ -290,51 +290,76 @@ export function graphFromDoc(
   if (errors.length) return { ok: false, errors }
 
   // ── when 의미 검증 ──────────────────────────────────────────────────
-  // 절이 가리키는 discriminator("노드id::경로")가 실제 엔티티 필드로 있고,
-  // values 가 그 enumValues 안의 값인지 확인한다 (형태 검증 통과 후).
+  // 입력 변형은 엔터티 내부 discriminated union — 절의 disc 는 반드시
+  // "자기 엔터티"("자기id::경로")의 discriminator 여야 하고, values 는 그
+  // enumValues 안의 값이어야 한다 (형태 검증 통과 후).
   // strict 는 에러, lenient 는 해당 절/값을 제거한다(절이 다 비면 when 자체 제거)
   // — matchWhen 이 없는 disc 를 무시하는 런타임 동작과 같은 의미.
   const semantic = doc as CodeDoc
-  const discRegistry = new Map<string, string[]>()
-  for (const ent of semantic.entities)
+  for (const [i, ent] of semantic.entities.entries()) {
+    const discs = new Map<string, string[]>()
     walkFieldTree(ent.fields, '', (f, path) => {
-      if (f.discriminator && f.enumValues?.length)
-        discRegistry.set(`${ent.id}::${path}`, f.enumValues)
+      if (f.discriminator && f.enumValues?.length) discs.set(path, f.enumValues)
     })
-  const checkWhen = (owner: { when?: When }, where: string) => {
-    if (!owner.when) return
-    const kept: WhenClause[] = []
-    owner.when.forEach((c, i) => {
-      const enumValues = discRegistry.get(c.disc)
-      if (!enumValues) {
-        if (!lenient)
+    const prefix = `${ent.id}::`
+    const checkWhen = (owner: { when?: When }, where: string, ownPath: string) => {
+      if (!owner.when) return
+      const kept: WhenClause[] = []
+      // 같은 disc 절 중복 — GUI 로는 만들 수 없고 strict 가 저작 시점에 에러로
+      // 거부한다. lenient 는 병합하지 않고 그대로 통과시킨다: 런타임(matchWhen)이
+      // 절 사이 AND 를 그대로 평가해 의미가 보존되고(교집합/공집합 모두), 다음
+      // strict 적용이 중복 에러로 모순 해소를 요구한다.
+      const seen = new Set<string>()
+      owner.when.forEach((c, ci) => {
+        const discPath = c.disc.startsWith(prefix)
+          ? c.disc.slice(prefix.length)
+          : null
+        // 자기 자신 참조 금지 — 다른 값을 고르면 분기 기준 필드 자체가
+        // 사라지는 모순이 생긴다
+        if (discPath === ownPath) {
+          if (!lenient)
+            errors.push(
+              `${where}.when[${ci}].disc "${c.disc}" — 자기 자신을 조건으로 참조할 수 없습니다.`,
+            )
+          return
+        }
+        const enumValues = discPath != null ? discs.get(discPath) : undefined
+        if (!enumValues) {
+          if (!lenient)
+            errors.push(
+              `${where}.when[${ci}].disc "${c.disc}" — 같은 엔터티("${ent.id}::경로")의 discriminator 만 참조할 수 있습니다.`,
+            )
+          return
+        }
+        const values = c.values.filter((v) => {
+          if (enumValues.includes(v)) return true
+          if (!lenient)
+            errors.push(
+              `${where}.when[${ci}] 값 "${v}" 는 "${c.disc}" 의 enumValues(${enumValues.join(', ')}) 에 없습니다.`,
+            )
+          return false
+        })
+        if (!values.length) return
+
+        // 중복 disc 절 — strict 만 거부, lenient 는 그대로 통과
+        if (seen.has(c.disc) && !lenient) {
           errors.push(
-            `${where}.when[${i}].disc "${c.disc}" 에 해당하는 discriminator("노드id::경로")가 없습니다.`,
+            `${where}.when 에 같은 discriminator("${c.disc}") 절이 중복됩니다 — 절 하나로 합치세요(절 사이는 AND).`,
           )
-        return
-      }
-      const values = c.values.filter((v) => {
-        if (enumValues.includes(v)) return true
-        if (!lenient)
-          errors.push(
-            `${where}.when[${i}] 값 "${v}" 는 "${c.disc}" 의 enumValues(${enumValues.join(', ')}) 에 없습니다.`,
-          )
-        return false
-      })
-      if (values.length)
+          return
+        }
+        seen.add(c.disc)
         kept.push(values.length === c.values.length ? c : { ...c, values })
-    })
-    if (lenient) {
-      if (kept.length) owner.when = kept
-      else delete owner.when
+      })
+      if (lenient) {
+        if (kept.length) owner.when = kept
+        else delete owner.when
+      }
     }
-  }
-  semantic.entities.forEach((ent, i) =>
     walkFieldTree(ent.fields, '', (f, path) =>
-      checkWhen(f, `entities[${i}] 필드 "${path}"`),
-    ),
-  )
-  semantic.mappings.forEach((m, i) => checkWhen(m, `mappings[${i}]`))
+      checkWhen(f, `entities[${i}] 필드 "${path}"`, path),
+    )
+  }
 
   if (errors.length) return { ok: false, errors }
 
@@ -373,7 +398,7 @@ export function graphFromDoc(
       targetHandle: m.targetField,
       ...(m.label ? { label: m.label } : {}),
       style: edgeKindProps(kind).style,
-      data: { kind, ...(m.when?.length ? { when: m.when } : {}) },
+      data: { kind },
     }
   })
   return { ok: true, nodes, edges }

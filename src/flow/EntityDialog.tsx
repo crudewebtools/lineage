@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { GitBranch, Trash2 } from 'lucide-react'
 import {
   Dialog,
@@ -17,12 +17,14 @@ import { FieldTreeEditor } from './FieldTreeEditor'
 import {
   anyVariant,
   buildRenames,
+  collectDraftDiscOptions,
   collectLeafPaths,
   collectPaths,
+  draftsToFields,
   toDraft,
-  toField,
   validate,
 } from './field-draft'
+import { SELF_NODE } from './variant'
 import type { EntityData, EntityKind } from './types'
 
 // 저장 시 필드 편집 결과 요약 — 부모(Flow)가 참조 갱신·엣지 정리에 쓴다.
@@ -37,24 +39,39 @@ export type FieldChanges = {
 export function EntityDialog({
   isNew,
   initial,
+  nodeId,
   onSave,
   onDelete,
   onClose,
 }: {
   isNew: boolean
   initial: EntityData | null
+  /** 수정 모드의 노드 id. 생성 모드는 null — 자기 참조는 $self 로 담고 저장 시 치환 */
+  nodeId: string | null
   onSave: (data: EntityData, changes: FieldChanges) => void
   onDelete?: () => void
   onClose: () => void
 }) {
+  const selfId = nodeId ?? SELF_NODE
   const [name, setName] = useState(initial?.name ?? '')
   const [kind, setKind] = useState<EntityKind>(initial?.kind ?? 'etc')
-  const [fields, setFields] = useState(() => toDraft(initial?.fields ?? []))
-  // 열었을 때의 _k → 경로. 저장 시점 경로와 비교해 개명을 알아낸다.
+  // draft 의 when 은 discriminator 행의 _k(정체성)를 참조하므로, 편집 중 개명·
+  // 일시적 이름 충돌을 추적할 필요가 없다 — setFields 는 평범한 setState.
+  const [fields, setFields] = useState(() =>
+    toDraft(initial?.fields ?? [], nodeId ?? undefined),
+  )
+  // 열었을 때의 _k → 경로. 저장 시점 경로와 비교해 개명을 알아낸다(엣지 핸들·접힘 갱신용).
   const [origPaths] = useState(() => collectPaths(fields))
   const [error, setError] = useState<string | null>(null)
   // 삭제 버튼 2단계 확인 — 한 번 누르면 "정말 삭제" 로 바뀌고, 다시 누르면 삭제
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // when 선택지 — 입력 변형은 엔터티 내부 개념이므로 "자기 discriminator" 만.
+  // 아직 저장 전이라도 draft 에서 실시간으로 모은다.
+  const discOptions = useMemo(
+    () => collectDraftDiscOptions(fields, selfId, name.trim() || '이 엔터티'),
+    [fields, selfId, name],
+  )
 
   const handleSave = () => {
     const nm = name.trim()
@@ -62,7 +79,9 @@ export function EntityDialog({
     const e = validate(fields, '최상위')
     if (e) return setError(e)
     onSave(
-      { name: nm, kind, fields: fields.map(toField) },
+      // draftsToFields 가 when(discK)을 최종 경로로 역번역하고, 무효해진
+      // 참조(해제·삭제·object 하위 폐기·빠진 enum 값)를 정리한다.
+      { name: nm, kind, fields: draftsToFields(fields, selfId) },
       {
         renames: buildRenames(origPaths, collectPaths(fields)),
         leafPaths: collectLeafPaths(fields),
@@ -111,14 +130,14 @@ export function EntityDialog({
           addLabel="필드 추가"
           fields={fields}
           setFields={setFields}
+          discOptions={discOptions}
         />
 
         {anyVariant(fields) && (
           <p className="text-[10px] leading-relaxed text-muted-foreground">
             <GitBranch className="mr-1 inline size-3 text-sky-500" />
-            변형(discriminator·when) 설정이 있는 필드는 그대로 보존되고, 필드
-            이름을 바꾸면 이를 참조하는 when 조건도 함께 갱신됩니다. 설정 변경은
-            오른쪽 코드 패널(JSON)에서.
+            행의 분기 아이콘으로 입력 변형(분기 기준·조건부 존재)을 설정합니다.
+            필드 이름을 바꾸면 이를 참조하는 when 조건·매핑도 함께 갱신됩니다.
           </p>
         )}
 

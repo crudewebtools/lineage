@@ -61,6 +61,7 @@ function FieldRow({
   const {
     onToggleCollapse,
     onFieldHover,
+    onSelectVariant,
     highlightedFields,
     dimmedFields,
     variantColors,
@@ -143,7 +144,8 @@ function FieldRow({
             <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
           ))}
         {/* 조건부 필드 — 어떤 변형 값에서만 존재하는지 배지로 표시 (왜 흐려지는지 보임).
-            (discriminator, 값)마다 색을 달리해 소속을 구분하고, 절 사이(AND)는 & 로 잇는다. */}
+            (discriminator, 값)마다 색을 달리해 소속을 구분하고, 절 사이(AND)는 & 로 잇는다.
+            배지를 클릭하면 그 변형으로 바로 전환된다 (셀렉터까지 안 가도 되게). */}
         {field.when?.map((clause, ci) => (
           // key 에 인덱스를 섞는다 — 검증기는 중복 disc 절/중복 값도 허용하므로
           // disc·값만으로는 key 가 겹칠 수 있다 (목록이 정적이라 인덱스로 충분)
@@ -158,8 +160,13 @@ function FieldRow({
               <Badge
                 key={`${v}::${vi}`}
                 variant="outline"
+                title="이 변형으로 전환"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectVariant(clause.disc, v)
+                }}
                 className={cn(
-                  'h-4 shrink-0 px-1 text-[9px] font-normal',
+                  'h-4 shrink-0 cursor-pointer px-1 text-[9px] font-normal',
                   variantColors.get(valueKey(clause.disc, v))?.badge ??
                     'border-sky-500/40 text-sky-600',
                 )}

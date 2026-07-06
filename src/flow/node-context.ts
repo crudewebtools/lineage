@@ -11,6 +11,7 @@ export const EMPTY_VARIANT_COLORS: ReadonlyMap<string, VariantColor> = new Map()
 //  - onFieldHover    : 필드 호버 시작/끝 알림 (계보 하이라이트용)
 //  - onEditEntity    : 엔터티 수정 모달 열기 (EntityNode 헤더의 ✏️)
 //  - onEditProcess   : 프로세스 수정 모달 열기 (ProcessNode 헤더의 ✏️)
+//  - onSelectVariant : when 배지 클릭 → 그 (disc, 값) 변형으로 전환
 //  - highlightedFields: 강조할 필드 키(fieldKey) 집합
 //  - dimmedFields    : 현재 변형에서 "없는" 필드 키 집합 (흐리게 표시)
 //  - variantColors   : 변형 값 → 배지 색 (when 배지 색 구분용)
@@ -20,6 +21,7 @@ export const NodeContext = createContext<{
   onFieldHover: (nodeId: string, path: string, entering: boolean) => void
   onEditEntity: (nodeId: string) => void
   onEditProcess: (nodeId: string) => void
+  onSelectVariant: (disc: string, value: string) => void
   highlightedFields: ReadonlySet<string>
   dimmedFields: ReadonlySet<string>
   variantColors: ReadonlyMap<string, VariantColor>
@@ -28,6 +30,7 @@ export const NodeContext = createContext<{
   onFieldHover: () => {},
   onEditEntity: () => {},
   onEditProcess: () => {},
+  onSelectVariant: () => {},
   highlightedFields: EMPTY_HIGHLIGHT,
   dimmedFields: EMPTY_HIGHLIGHT,
   variantColors: EMPTY_VARIANT_COLORS,
